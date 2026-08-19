@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+coverage/
+
+# 환경변수 (절대 커밋 금지 — OpenAI 키 등)
+.env
+ai-service/.env
