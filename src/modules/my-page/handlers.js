@@ -4,7 +4,7 @@ import { maskUsername } from '../places/handlers.js';
 export async function getMyPage(context) {
   const user = requireAuth(context);
   const store = context.store;
-  const scProfile = store.getSelfCareProfile(user.id);
+  const scProfile = await context.repositories.profile.getSelfCareProfile(user.id);
   const concern = store.getConcern(user.id);
   const neighbors = store.listNeighbors(user.id);
   const garden = store.getGarden(user.id);

@@ -33,26 +33,26 @@ function validateProfile(body, { partial = false } = {}) {
 export async function putSelfCareProfile(context) {
   const user = requireAuth(context);
   const profile = validateProfile(context.body);
-  const saved = context.store.setSelfCareProfile(user.id, profile);
+  const saved = await context.repositories.profile.setSelfCareProfile(user.id, profile);
   return { data: saved, message: '자기관리 프로필이 저장되었습니다.' };
 }
 
 export async function getSelfCareProfile(context) {
   const user = requireAuth(context);
-  const profile = context.store.getSelfCareProfile(user.id);
+  const profile = await context.repositories.profile.getSelfCareProfile(user.id);
   if (!profile) throw new ApiError(404, 'PROFILE_NOT_FOUND', '자기관리 프로필이 없습니다.');
   return { data: profile };
 }
 
 export async function patchSelfCareProfile(context) {
   const user = requireAuth(context);
-  const existing = context.store.getSelfCareProfile(user.id);
+  const existing = await context.repositories.profile.getSelfCareProfile(user.id);
   if (!existing) throw new ApiError(404, 'PROFILE_NOT_FOUND', '자기관리 프로필이 없습니다.');
   const patch = validateProfile(context.body, { partial: true });
   if (Object.keys(patch).length === 0) {
     throw new ApiError(422, 'VALIDATION_ERROR', '수정할 값이 필요합니다.');
   }
-  const saved = context.store.setSelfCareProfile(user.id, patch);
+  const saved = await context.repositories.profile.setSelfCareProfile(user.id, patch);
   return { data: saved, message: '자기관리 프로필이 수정되었습니다.' };
 }
 

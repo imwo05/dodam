@@ -10,17 +10,17 @@ import {
 
 export async function createConversation(context) {
   const user = requireAuth(context);
-  const conversation = context.store.createOnboardingConversation({ userId: user.id });
-  const profile = ensureProfile(context.store, user);
+  const conversation = await context.repositories.onboarding.createOnboardingConversation({ userId: user.id });
+  const profile = await ensureProfile(context, user);
   const result = await requestTurn(context, user, profile, []);
-  const assistantMessage = context.store.addOnboardingMessage({
+  const assistantMessage = await context.repositories.onboarding.addOnboardingMessage({
     conversationId: conversation.id,
     role: 'ASSISTANT',
     content: result.assistantMessage
   });
   return {
     status: 201,
-    data: buildConversationResponse(context.store, user, conversation.id, {
+    data: await buildConversationResponse(context, user, conversation.id, {
       assistantMessage,
       missingSlots: result.missingSlots,
       fallback: result.fallback
@@ -29,60 +29,62 @@ export async function createConversation(context) {
 }
 
 export async function getConversation(context) {
-  const { user, conversation } = findOwnedConversation(context);
-  return { data: buildConversationResponse(context.store, user, conversation.id) };
+  const { user, conversation } = await findOwnedConversation(context);
+  return { data: await buildConversationResponse(context, user, conversation.id) };
 }
 
 export async function addConversationMessage(context) {
-  const { user, conversation } = findOwnedConversation(context);
+  const { user, conversation } = await findOwnedConversation(context);
   if (conversation.status !== 'ACTIVE') {
     throw new ApiError(409, 'CONVERSATION_COMPLETED', '완료된 onboarding 대화에는 메시지를 추가할 수 없습니다.');
   }
   const content = assertRequiredString(context.body.content, 'content', { min: 1, max: 3000 });
-  const userMessage = context.store.addOnboardingMessage({
+  const userMessage = await context.repositories.onboarding.addOnboardingMessage({
     conversationId: conversation.id,
     role: 'USER',
     content
   });
-  const profile = ensureProfile(context.store, user);
-  const messages = context.store.listOnboardingMessages(conversation.id);
+  const profile = await ensureProfile(context, user);
+  const messages = await context.repositories.onboarding.listOnboardingMessages(conversation.id);
   const result = await requestTurn(context, user, profile, messages);
   const patch = result.extractedProfilePatch;
-  if (Object.keys(patch).length) context.store.setSelfCareProfile(user.id, patch);
-  const assistantMessage = context.store.addOnboardingMessage({
+  const assistantMessage = await context.repositories.onboarding.addOnboardingMessage({
     conversationId: conversation.id,
     role: 'ASSISTANT',
     content: result.assistantMessage
   });
+  if (Object.keys(patch).length) await context.repositories.profile.setSelfCareProfile(user.id, patch);
   return {
     data: {
-      ...buildConversationResponse(context.store, user, conversation.id, {
+      ...(await buildConversationResponse(context, user, conversation.id, {
         userMessage,
         assistantMessage,
         missingSlots: result.missingSlots,
         fallback: result.fallback
-      }),
-      canComplete: canCompleteFor(context.store, user)
+      })),
+      canComplete: await canCompleteFor(context, user)
     }
   };
 }
 
 export async function completeConversation(context) {
-  const { user, conversation } = findOwnedConversation(context);
+  const { user, conversation } = await findOwnedConversation(context);
   if (conversation.status === 'COMPLETED') {
-    return { data: buildConversationResponse(context.store, user, conversation.id) };
+    await context.repositories.user.setOnboardingCompleted(user.id, true);
+    return { data: await buildConversationResponse(context, user, conversation.id) };
   }
-  if (!canCompleteFor(context.store, user)) {
+  if (!(await canCompleteFor(context, user))) {
+    const profile = await context.repositories.profile.getSelfCareProfile(user.id);
     throw new ApiError(409, 'ONBOARDING_INCOMPLETE', '개인화에 필요한 정보가 아직 부족합니다.', {
-      missingSlots: missingRequiredSlots(context.store.getSelfCareProfile(user.id), context.store.getSelfCareProfile(user.id))
+      missingSlots: missingRequiredSlots(profile, profile)
     });
   }
-  const updated = context.store.updateOnboardingConversation(conversation.id, {
+  const updated = await context.repositories.onboarding.updateOnboardingConversation(conversation.id, {
     status: 'COMPLETED',
     completedAt: new Date().toISOString()
   });
-  context.store.updateUser(user.id, { onboardingCompleted: true });
-  return { data: buildConversationResponse(context.store, user, conversation.id, { conversation: updated }) };
+  await context.repositories.user.setOnboardingCompleted(user.id, true);
+  return { data: await buildConversationResponse(context, user, conversation.id, { conversation: updated }) };
 }
 
 async function requestTurn(context, user, profile, messages) {
@@ -141,21 +143,21 @@ function safeFallbackTurn(profile, messages) {
   };
 }
 
-function ensureProfile(store, user) {
-  const existing = store.getSelfCareProfile(user.id);
+async function ensureProfile(context, user) {
+  const existing = await context.repositories.profile.getSelfCareProfile(user.id);
   if (existing) return existing;
-  return store.setSelfCareProfile(user.id, { aiStyle: user.aiStyle === 'T' ? 'T' : 'F' });
+  return context.repositories.profile.setSelfCareProfile(user.id, { aiStyle: user.aiStyle === 'T' ? 'T' : 'F' });
 }
 
-function canCompleteFor(store, user) {
-  const profile = store.getSelfCareProfile(user.id);
+async function canCompleteFor(context, user) {
+  const profile = await context.repositories.profile.getSelfCareProfile(user.id);
   return canCompleteProfile(profile, profile);
 }
 
-function buildConversationResponse(store, user, conversationId, extra = {}) {
-  const conversation = extra.conversation ?? store.findOnboardingConversation(conversationId);
-  const profile = store.getSelfCareProfile(user.id) ?? ensureProfile(store, user);
-  const messages = store.listOnboardingMessages(conversationId);
+async function buildConversationResponse(context, user, conversationId, extra = {}) {
+  const conversation = extra.conversation ?? await context.repositories.onboarding.findOnboardingConversation(conversationId, user.id);
+  const profile = await context.repositories.profile.getSelfCareProfile(user.id) ?? await ensureProfile(context, user);
+  const messages = await context.repositories.onboarding.listOnboardingMessages(conversationId);
   const missingSlots = sanitizeMissingSlots(
     extra.missingSlots ?? missingRequiredSlots(profile, profile),
     profile
@@ -189,11 +191,13 @@ function isFilled(profile, slot) {
   return Array.isArray(profile[slot]) ? profile[slot].length > 0 : profile[slot] != null;
 }
 
-function findOwnedConversation(context) {
+async function findOwnedConversation(context) {
   const user = requireAuth(context);
-  const conversation = context.store.findOnboardingConversation(context.params.conversationId);
+  const conversation = await context.repositories.onboarding.findOnboardingConversation(
+    context.params.conversationId,
+    user.id
+  );
   if (!conversation) throw new ApiError(404, 'ONBOARDING_CONVERSATION_NOT_FOUND', 'onboarding 대화를 찾을 수 없습니다.');
-  if (conversation.userId !== user.id) throw new ApiError(403, 'FORBIDDEN', '본인 onboarding 대화만 접근할 수 있습니다.');
   return { user, conversation };
 }
 

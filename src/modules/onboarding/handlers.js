@@ -4,7 +4,7 @@ export async function completeOnboarding(context) {
   const user = requireAuth(context);
   const store = context.store;
 
-  const scProfile = store.getSelfCareProfile(user.id);
+  const scProfile = await context.repositories.profile.getSelfCareProfile(user.id);
   const concern = store.getConcern(user.id);
 
   const selfCareAreas = concern?.analysis?.categories ?? [];
@@ -23,7 +23,7 @@ export async function completeOnboarding(context) {
   }
   const initialRecommendations = candidates.slice(0, 3).map((p) => ({ placeId: p.id, name: p.name }));
 
-  store.updateUser(user.id, { onboardingCompleted: true });
+  await context.repositories.user.setOnboardingCompleted(user.id, true);
 
   return {
     data: {

@@ -15,7 +15,12 @@ const distanceProvider = createDistanceProvider();
 export async function createRecommendations(context) {
   const user = requireAuth(context);
   const input = validateRecoRequest(context.body);
-  const planContext = buildPlanBContext({ store: context.store, user, input });
+  const planContext = await buildPlanBContext({
+    store: context.store,
+    repositories: context.repositories,
+    user,
+    input
+  });
   const candidates = retrieveCandidates({ store: context.store, planContext, routeProvider, distanceProvider });
   if (!candidates.length) throw noCandidateError();
 

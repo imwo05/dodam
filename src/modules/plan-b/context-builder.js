@@ -3,7 +3,7 @@ import { profileForResponse } from '../onboarding/profile.js';
 
 export const PLAN_B_TIMEZONE = 'Asia/Seoul';
 
-export function buildPlanBContext({ store, user, input }) {
+export async function buildPlanBContext({ store, repositories, user, input }) {
   const availableMinutes = timeDiffMinutes(input.startTime, input.endTime);
   if (availableMinutes <= 0) {
     throw new ApiError(422, 'INVALID_TIME_WINDOW', 'endTime은 startTime보다 늦어야 합니다.');
@@ -28,7 +28,9 @@ export function buildPlanBContext({ store, user, input }) {
     .filter((schedule) => schedule.isFixed && schedule.startTime && toMinutes(schedule.startTime) > toMinutes(input.startTime))
     .sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime))[0] ?? null;
 
-  const profile = store.getSelfCareProfile(user.id);
+  const profile = repositories?.profile
+    ? await repositories.profile.getSelfCareProfile(user.id)
+    : store.getSelfCareProfile(user.id);
   const concern = store.getConcern(user.id);
   const aiStyle = profile?.aiStyle === 'T' ? 'T' : 'F';
   const effectiveEndTime = nextFixedSchedule && toMinutes(nextFixedSchedule.startTime) < toMinutes(input.endTime)

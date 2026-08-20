@@ -3,6 +3,7 @@ import { URL } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { createStore } from './data/store.js';
+import { createRepositories } from './data/repositories/index.js';
 import { ApiError } from './lib/errors.js';
 import { parseJsonBody, sendError, sendNoContent, sendSuccess } from './lib/http.js';
 import { buildAuthService } from './modules/auth/service.js';
@@ -199,11 +200,22 @@ const routes = [
 }));
 
 export function createApp(options = {}) {
-  return createServer(createRequestHandler(options));
+  const requestHandler = createRequestHandler(options);
+  const server = createServer(requestHandler);
+  server.persistenceAdapterName = requestHandler.persistenceAdapterName;
+  return server;
 }
 
 export function createRequestHandler(options = {}) {
   const store = options.store ?? createStore();
+  const repositories = options.repositories ?? createRepositories({
+    store,
+    supabaseClient: options.supabaseClient,
+    supabaseUrl: options.supabaseUrl,
+    supabaseServiceRoleKey: options.supabaseServiceRoleKey,
+    fetchImpl: options.fetchImpl,
+    adapter: options.persistenceAdapter
+  });
   const auth = buildAuthService({
     store,
     jwtSecret: options.jwtSecret ?? process.env.JWT_SECRET ?? 'dodam-dev-secret',
@@ -223,7 +235,7 @@ export function createRequestHandler(options = {}) {
       fetchImpl: options.fetchImpl
     });
 
-  return async function handleRequest(req, res) {
+  const handleRequest = async function handleRequest(req, res) {
     try {
       setCorsHeaders(res);
       if (req.method === 'OPTIONS') return sendNoContent(res);
@@ -246,6 +258,7 @@ export function createRequestHandler(options = {}) {
         query: Object.fromEntries(requestUrl.searchParams.entries()),
         params: route.params,
         store,
+        repositories,
         auth,
         aiClient
       };
@@ -259,6 +272,8 @@ export function createRequestHandler(options = {}) {
       return sendError(res, error);
     }
   };
+  handleRequest.persistenceAdapterName = repositories.adapterName;
+  return handleRequest;
 }
 
 function matchRoute(method, pathname) {
