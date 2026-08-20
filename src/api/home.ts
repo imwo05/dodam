@@ -1,4 +1,5 @@
 import { apiRequest } from './client';
+import type { GardenData } from './garden';
 
 export type HomeSchedule = {
   id: string;
@@ -22,7 +23,7 @@ export type HomeResponse = {
   dailySchedules: HomeSchedule[];
   realtimeRecommendedPlaces: HomePlace[];
   savedPlaces: HomePlace[];
-  garden: unknown;
+  garden: GardenData;
 };
 
 export function getHome(accessToken: string, date: string) {

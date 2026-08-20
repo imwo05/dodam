@@ -5,6 +5,7 @@ import type { Schedule } from '../../api/schedules';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSchedules } from '../../contexts/ScheduleContext';
 import { AppShell } from '../components/AppShell';
+import { GardenView } from '../components/GardenView';
 import { schedulePresentation } from '../components/ScheduleChip';
 import { formatHeaderDate, formatTimeRange, todayKey } from '../utils/date';
 
@@ -68,10 +69,7 @@ export function HomePage() {
           <h2>저장된 장소</h2>
           {data?.savedPlaces.length ? data.savedPlaces.map((place) => <PlaceCard key={place.id} place={place} />) : <p className="home-empty">저장된 장소가 아직 없어요.</p>}
         </section>
-        <section className="home-section home-garden-section">
-          <h2>다람쥐의 정원</h2>
-          <p className="home-empty">정원 기능은 다음 단계에서 준비할게요.</p>
-        </section>
+        <GardenView className="home-section home-garden-section" garden={data?.garden ?? null} isLoading={!data && !error} />
       </main>
     </AppShell>
   );
