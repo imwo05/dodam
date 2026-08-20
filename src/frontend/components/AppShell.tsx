@@ -7,7 +7,7 @@ type AppShellProps = { children: ReactNode; activeNav?: string; showBottomNav?: 
 
 export function AppShell({ children, activeNav, showBottomNav = false, className = '', statusBarOffset = 0 }: AppShellProps) {
   return (
-    <div className={`phone-shell app-shell ${className}`}>
+    <div className={`phone-shell app-shell ${showBottomNav ? 'app-shell--with-bottom-nav' : ''} ${className}`.trim()}>
       <StatusBar offset={statusBarOffset} />
       <div className="app-shell__scroll-region">{children}</div>
       {showBottomNav ? <BottomNavigation active={activeNav} /> : null}

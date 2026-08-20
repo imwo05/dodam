@@ -2,14 +2,29 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useOnboarding, type ChatMessage } from '../../contexts/OnboardingContext';
-import { AppShell } from '../components/AppShell';
+import { AppShell, PageHeader } from '../components/AppShell';
 
 function MessageBubble({ message }: { message: ChatMessage }) {
   return (
-    <article className={`onboarding-message onboarding-message--${message.role.toLowerCase()}`} data-message-id={message.id} data-role={message.role}>
-      <img src="/assets/onboarding-chat-tape.png" alt="" aria-hidden="true" />
-      <p>{message.content}</p>
-    </article>
+    <div className={`onboarding-message-row onboarding-message-row--${message.role.toLowerCase()}`} data-message-id={message.id} data-role={message.role}>
+      {message.role === 'ASSISTANT' ? <img className="onboarding-message__avatar" src="/assets/dami-default.png" alt="담이" /> : null}
+      <article className="onboarding-message">
+        <img className="onboarding-message__surface" src="/assets/onboarding-chat-tape.png" alt="" aria-hidden="true" />
+        <p>{message.content}</p>
+      </article>
+    </div>
+  );
+}
+
+function ThinkingMessage() {
+  return (
+    <div className="onboarding-message-row onboarding-message-row--assistant onboarding-message-row--typing" role="status">
+      <img className="onboarding-message__avatar" src="/assets/dami-default.png" alt="담이" />
+      <article className="onboarding-message">
+        <img className="onboarding-message__surface" src="/assets/onboarding-chat-tape.png" alt="" aria-hidden="true" />
+        <p>담이가 생각 중이에요<span className="onboarding-thinking-dots" aria-hidden="true">…</span></p>
+      </article>
+    </div>
   );
 }
 
@@ -18,6 +33,7 @@ export function AiOnboardingPage() {
   const { accessToken, refreshUser } = useAuth();
   const {
     conversationId,
+    conversationStatus,
     messages,
     canComplete,
     loading,
@@ -78,14 +94,10 @@ export function AiOnboardingPage() {
   return (
     <AppShell className="onboarding-shell onboarding-shell--ai">
       <main className="onboarding-screen ai-onboarding-screen" data-node-id="291:4087">
+        <PageHeader title="온보딩" backTo="/onboarding/basic" className="page-header--onboarding ai-onboarding-header" />
         <div className="ai-onboarding-messages" aria-live="polite">
           {messages.map((message) => <MessageBubble key={message.id} message={message} />)}
-          {loading && conversationId ? (
-            <div className="onboarding-message onboarding-message--typing" data-typing="true">
-              <img src="/assets/onboarding-chat-tape.png" alt="" aria-hidden="true" />
-              <p>담이가 생각 중이에요…</p>
-            </div>
-          ) : null}
+          {loading ? <ThinkingMessage /> : null}
           <div ref={messagesEndRef} />
         </div>
         {error ? (
@@ -99,10 +111,12 @@ export function AiOnboardingPage() {
           <textarea id="onboarding-message" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="담이에게 답해 주세요" rows={1} disabled={!conversationId || loading} />
           <button type="submit" disabled={!conversationId || !draft.trim() || loading}>보내기</button>
         </form>
-        <button className={`onboarding-next-button ${canComplete ? 'is-ready' : ''}`} type="button" onClick={() => void handleComplete()} disabled={!canComplete || loading}>
-          <img src="/assets/onboarding-tape.png" alt="" aria-hidden="true" />
-          <span>{loading ? '확인 중' : '다음'}</span>
-        </button>
+        {canComplete && conversationStatus !== 'COMPLETED' ? (
+          <button className="onboarding-next-button is-ready" type="button" onClick={() => void handleComplete()} disabled={loading}>
+            <img src="/assets/onboarding-tape.png" alt="" aria-hidden="true" />
+            <span>{loading ? '확인 중' : '다음'}</span>
+          </button>
+        ) : null}
       </main>
     </AppShell>
   );

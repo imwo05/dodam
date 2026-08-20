@@ -17,7 +17,9 @@ export function BottomNavigation({ active }: { active?: string }) {
       <div className="bottom-navigation__icons">
         {items.map((item) => (
           <Link className={`bottom-navigation__item ${item.label === active ? 'is-active' : ''}`} to={item.to} key={item.label}>
-            <img className={`bottom-navigation__icon ${item.iconClass}`} src={`/assets/${item.icon}`} alt="" />
+            <span className="bottom-navigation__icon-box">
+              <img className={`bottom-navigation__icon ${item.iconClass}`} src={`/assets/${item.icon}`} alt="" />
+            </span>
             <span>{item.label}</span>
           </Link>
         ))}
