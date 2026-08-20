@@ -66,6 +66,7 @@ export type PlanBStop = {
 
 export type PlanBResponse = {
   sessionId: string;
+  date?: string;
   currentStopOrder?: number | null;
   status: PlanBStatus;
   availableMinutes: number;
