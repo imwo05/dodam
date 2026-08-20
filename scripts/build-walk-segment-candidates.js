@@ -1,7 +1,8 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const [district] = process.argv.slice(2);
-if (!['관악', '종로'].includes(district)) throw new Error('Usage: node scripts/build-walk-segment-candidates.js <관악|종로>');
+const [district, countArg] = process.argv.slice(2);
+const requestedCount = Number(countArg ?? 80);
+if (!['관악', '종로'].includes(district) || !Number.isInteger(requestedCount) || requestedCount < 1) throw new Error('Usage: node scripts/build-walk-segment-candidates.js <관악|종로> [count]');
 
 const placesUrl = new URL('../data/dodam_places_beta.csv', import.meta.url);
 const segmentsUrl = new URL('../data/dodam_walk_segments_beta.csv', import.meta.url);
@@ -27,13 +28,13 @@ edges.sort((a, b) => a.distance - b.distance);
 const selected = [];
 const endpointUse = new Map();
 for (const edge of edges) {
-  if (selected.length === 80) break;
+  if (selected.length === requestedCount) break;
   const startCount = endpointUse.get(edge.start.place_id) ?? 0;
   const endCount = endpointUse.get(edge.end.place_id) ?? 0;
   if (startCount >= 3 || endCount >= 3) continue;
   selected.push(edge); endpointUse.set(edge.start.place_id, startCount + 1); endpointUse.set(edge.end.place_id, endCount + 1);
 }
-if (selected.length < 80) throw new Error(`${district}: walk segment pairs insufficient (${selected.length})`);
+if (selected.length < requestedCount) throw new Error(`${district}: walk segment pairs insufficient (${selected.length})`);
 
 const highestId = Math.max(0, ...segments.filter((segment) => segment.segment_id.startsWith(`sg_${prefix}_`)).map((segment) => Number(segment.segment_id.match(/_(\d+)$/)?.[1] ?? 0)));
 const rows = selected.map((edge, index) => ({

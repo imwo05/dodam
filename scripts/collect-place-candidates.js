@@ -6,11 +6,11 @@ loadEnvFile();
 const SEARCH_URL = 'https://naverapihub.apigw.ntruss.com/search/v1/local';
 const GEOCODE_URL = 'https://maps.apigw.ntruss.com/map-geocode/v2/geocode';
 const OUTPUT = new URL('../data/dodam_places_beta.csv', import.meta.url);
-const REQUIRED_PER_CATEGORY = 80;
+const REQUIRED_PER_CATEGORY = Number(process.argv[4] ?? 80);
 const CATEGORIES = {
   '건강 간편식': { keywords: ['샐러드', '포케', '그릭요거트', '아사이볼', '샌드위치', '비건식', '샐러드 도시락', '다이어트 도시락', '건강식', '주스', '스무디'], menu: '샐러드·포케·그릭요거트·아사이볼·신선 샌드위치 및 건강식 검색 후보', tags: '#건강간편식 #혼밥 #짧은체류 #검수필요' },
   '힐링 공간': { keywords: ['조용한 카페', '카페', '커피', '북카페', '독립서점', '도서관', '음악감상실', 'LP카페', '갤러리', '전시', '문화공간', '작은도서관'], menu: '조용한 카페·독립서점·도서관·음악감상·문화 공간 검색 후보', tags: '#힐링공간 #조용한 #혼자좋은 #검수필요' },
-  '공원': { keywords: ['공원', '어린이공원', '근린공원', '녹지', '쌈지공원', '쉼터', '놀이터', '정자', '광장', '휴식공간', '산책'], menu: '잠깐 쉬거나 가볍게 걷기 좋은 공원·녹지·휴식 공간 검색 후보', tags: '#공원 #잠깐휴식 #산책 #검수필요' },
+  '공원': { keywords: ['공원', '어린이공원', '근린공원', '녹지', '쌈지공원', '쉼터', '놀이터', '정자', '광장', '휴식공간', '산책', '소공원', '잔디광장', '공공공지', '마당', '전망쉼터'], menu: '잠깐 쉬거나 가볍게 걷기 좋은 공원·인접 녹지·광장·휴식 공간 검색 후보', tags: '#공원 #잠깐휴식 #산책 #검수필요' },
   '산책로': { keywords: ['산책로', '둘레길', '자락길', '하천길', '골목길', '등산로', '숲길', '문화거리', '보행로', '산책', '전망대'], menu: '혼자 걷기 좋은 하천·골목·숲·문화 산책 구간 검색 후보', tags: '#산책로 #혼자좋은 #걷기 #검수필요' },
   '운동 스팟': { keywords: ['헬스장', '필라테스', '요가', '체육센터', '운동장', '체력단련장', '탁구장', '수영장', '배드민턴장', '풋살장', '생활체육'], menu: '가볍게 운동을 시작할 수 있는 체육·요가·필라테스·운동 공간 검색 후보', tags: '#운동스팟 #가벼운시작 #회복 #검수필요' }
 };
@@ -20,7 +20,7 @@ const DISTRICTS = {
 };
 const LARGE_CHAIN_PATTERN = /스타벅스|투썸|이디야|메가커피|컴포즈|빽다방|할리스|폴바셋|탐앤탐스|커피빈|파스쿠찌|던킨|파리바게뜨|뚜레쥬르|서브웨이|스포애니|커브스|바디채널/i;
 const [targetDistrict, targetCategory] = process.argv.slice(2);
-if (!DISTRICTS[targetDistrict] || !CATEGORIES[targetCategory]) throw new Error('Usage: node scripts/collect-place-candidates.js <관악|종로> <건강 간편식|힐링 공간|공원|산책로|운동 스팟>');
+if (!DISTRICTS[targetDistrict] || !CATEGORIES[targetCategory] || !Number.isInteger(REQUIRED_PER_CATEGORY) || REQUIRED_PER_CATEGORY < 1) throw new Error('Usage: node scripts/collect-place-candidates.js <관악|종로> <유형> [count]');
 
 const requiredEnv = ['NAVER_SEARCH_CLIENT_ID', 'NAVER_SEARCH_CLIENT_SECRET', 'NAVER_MAPS_CLIENT_ID', 'NAVER_MAPS_CLIENT_SECRET'];
 for (const key of requiredEnv) if (!process.env[key]) throw new Error(`${key} is required`);
