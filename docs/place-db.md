@@ -16,7 +16,7 @@
 npm run validate:place-db
 ```
 
-검증은 필수 컬럼, 좌표 범위, 서초·종로 필터 및 Point–Segment–Experience 참조 관계를 검사합니다. 앱 시작 시 Point는 기존 장소 모델로도 로드되며, 원래 메타데이터(`district`, `wellnessType`, `moodTags`, `sourceStatus`)를 보존합니다.
+검증은 필수 컬럼, 좌표 범위, 종로·관악 생활권 필터와 Point–Segment–Experience의 참조·생활권 일치 관계를 검사합니다. 앱 시작 시 Point는 기존 장소 모델로도 로드되며, 원래 메타데이터(`district`, `wellnessType`, `moodTags`, `sourceStatus`)를 보존합니다.
 
 ## 네이버 API 수집 순서
 
