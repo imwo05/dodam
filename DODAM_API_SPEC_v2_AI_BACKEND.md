@@ -73,7 +73,15 @@ Places support `geometryType: "POINT"` with `point`, or `geometryType: "SEGMENT"
 
 ## Self-care and garden
 
-Self-care profiles accept optional `aiStyle: "T" | "F"` (default `F`). `GET /api/v1/users/me/garden` returns `completedActivityCount`, `pointBalance`, and `categoryGrowth[{category,count,stage}]`. Growth is deterministic and category-based; no location marker is persisted.
+Self-care profiles accept optional `aiStyle: "T" | "F"` (default `F`). `GET /api/v1/users/me/garden` returns `completedActivityCount`, `pointBalance`, and `categoryGrowth[{category,count,stage}]`. Growth is deterministic and category-based; no location marker or frontend asset name is persisted.
+
+Garden counts only the existing `UserActivity` record created by `POST /api/v1/plan-b/{sessionId}/stops/{stopId}/complete`. The activity category is read from the completed stop's structured place category (`primaryCategory` or `activityType`); titles and locations are never used to infer a category. The same activity rows are exposed by Archive and are not counted again there.
+
+Planned or copied schedules, Plan B recommendations or starts, skipped/cancelled Plan B stops, saved Places, Journals, and Reviews do not count as completed activity. A skipped stop creates no `UserActivity`.
+
+Garden categories are `WALK`, `EXERCISE`, `DIET`, `MENTAL_HEALTH`, and `RUNNING`, in that response order. `CUSTOM` remains a valid self-care input elsewhere but is not emitted because the current Garden asset contract has no `CUSTOM` layer. Stages are capped at 4 with thresholds `0 → 0`, `1 → 1`, `3 → 2`, `6 → 3`, and `10 → 4` completed activities per category. The current GardenView has no RUNNING-specific visual layer, so RUNNING growth is returned as structured data but renders no category asset until one exists.
+
+Activity and Plan B persistence currently remains in the in-memory store. When the process restarts, Garden growth derived from those records resets; the Supabase adapter does not yet persist schedules, Plan B sessions, or UserActivity rows.
 
 Review and Journal contracts remain unchanged.
 

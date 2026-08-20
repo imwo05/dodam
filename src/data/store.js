@@ -1,5 +1,6 @@
 import { placesSeed, seedUsers } from './seed.js';
 import { mergePersonalizationProfile, profileForResponse } from '../modules/onboarding/profile.js';
+import { calculateGardenData } from '../modules/garden/growth.js';
 
 // 문자열 ID 생성기 (usr_001, plc_002 ...)
 function makeId(prefix, n) {
@@ -535,17 +536,7 @@ export function createStore() {
     },
     getGarden(userId) {
       const activities = [...state.activities.values()].filter((a) => a.userId === String(userId));
-      const completed = activities.length;
-      const categories = ['WALK', 'EXERCISE', 'RUNNING', 'DIET', 'MENTAL_HEALTH', 'CUSTOM'];
-      const categoryGrowth = categories.map((category) => {
-        const count = activities.filter((activity) => activity.category === category).length;
-        return { category, count, stage: growthStage(count) };
-      });
-      return {
-        completedActivityCount: completed,
-        pointBalance: completed * 10,
-        categoryGrowth
-      };
+      return calculateGardenData(activities);
     },
     countCreatedPlaces(userId) {
       return [...state.places.values()].filter((p) => p.creatorId === String(userId)).length;
@@ -602,12 +593,4 @@ export function createStore() {
 function clone(obj) {
   if (obj == null) return obj;
   return JSON.parse(JSON.stringify(obj));
-}
-
-function growthStage(count) {
-  if (count >= 10) return 4;
-  if (count >= 6) return 3;
-  if (count >= 3) return 2;
-  if (count >= 1) return 1;
-  return 0;
 }
