@@ -7,6 +7,7 @@ const CATEGORIES = new Set(['EXERCISE', 'DIET', 'WALK', 'RUNNING', 'MENTAL_HEALT
 export function serializeSchedule(s) {
   return {
     id: s.id,
+    userId: s.userId,
     date: s.date,
     startTime: s.startTime,
     endTime: s.endTime,
@@ -15,7 +16,9 @@ export function serializeSchedule(s) {
     selfCareCategory: s.selfCareCategory,
     location: s.location ?? null,
     placeId: s.placeId,
-    source: s.source
+    source: s.source,
+    createdAt: s.createdAt,
+    updatedAt: s.updatedAt ?? null
   };
 }
 
@@ -58,10 +61,19 @@ export async function getDaySchedules(context) {
   return { data: { date, schedules } };
 }
 
+export async function getSchedules(context) {
+  const user = requireAuth(context);
+  const from = assertDate(context.query.from, 'from');
+  const to = assertDate(context.query.to, 'to');
+  if (from > to) throw new ApiError(422, 'VALIDATION_ERROR', 'from은 to보다 늦을 수 없습니다.');
+  const schedules = context.store.listSchedules({ userId: user.id, from, to }).map(serializeSchedule);
+  return { data: { from, to, schedules } };
+}
+
 export async function patchSchedule(context) {
   const user = requireAuth(context);
   const schedule = findOwnedSchedule(context, user.id);
-  const patch = validateScheduleItem(context.body, { withDate: false, partial: true });
+  const patch = validateScheduleItem(context.body, { withDate: false, partial: true, existing: schedule });
   if (Object.keys(patch).length === 0) {
     throw new ApiError(422, 'VALIDATION_ERROR', '수정할 값이 필요합니다.');
   }
@@ -115,7 +127,7 @@ export async function copySchedules(context) {
 }
 
 // ---------- helpers ----------
-function validateScheduleItem(body, { withDate = false, partial = false } = {}) {
+function validateScheduleItem(body, { withDate = false, partial = false, existing = null } = {}) {
   const out = {};
   if (withDate) out.date = assertDate(body.date, 'date');
   else if (body.date !== undefined) out.date = assertDate(body.date, 'date');
@@ -123,8 +135,8 @@ function validateScheduleItem(body, { withDate = false, partial = false } = {}) 
   const need = (f) => !partial || body[f] !== undefined;
 
   if (need('title')) out.title = assertRequiredString(body.title, 'title', { min: 1, max: 100 });
-  if (need('startTime')) out.startTime = assertTime(body.startTime, 'startTime', true);
-  if (body.endTime !== undefined) out.endTime = assertTime(body.endTime, 'endTime', true);
+  if (need('startTime')) out.startTime = assertTime(body.startTime, 'startTime');
+  if (need('endTime')) out.endTime = assertTime(body.endTime, 'endTime');
   if (need('isFixed')) {
     if (typeof body.isFixed !== 'boolean') throw new ApiError(422, 'VALIDATION_ERROR', 'isFixed는 boolean이어야 합니다.');
     out.isFixed = body.isFixed;
@@ -132,6 +144,10 @@ function validateScheduleItem(body, { withDate = false, partial = false } = {}) 
   if (body.selfCareCategory !== undefined) out.selfCareCategory = assertCategoryNullable(body.selfCareCategory);
   if (body.location !== undefined) out.location = parseLocation(body.location);
   if (body.placeId !== undefined) out.placeId = body.placeId ?? null;
+  assertTimeRange(
+    out.startTime !== undefined ? out.startTime : existing?.startTime,
+    out.endTime !== undefined ? out.endTime : existing?.endTime
+  );
   return out;
 }
 
@@ -170,6 +186,18 @@ function assertTime(value, field, nullable = false) {
     throw new ApiError(422, 'VALIDATION_ERROR', `${field}는 HH:MM 형식이어야 합니다.`);
   }
   return value;
+}
+
+function assertTimeRange(startTime, endTime) {
+  if (startTime == null || endTime == null) return;
+  const start = toMinutes(startTime);
+  const end = toMinutes(endTime);
+  if (end <= start) throw new ApiError(422, 'INVALID_TIME_RANGE', 'endTime은 startTime보다 늦어야 합니다.');
+}
+
+function toMinutes(value) {
+  const [hours, minutes] = value.split(':').map(Number);
+  return hours * 60 + minutes;
 }
 
 function assertCategoryNullable(value) {

@@ -198,7 +198,8 @@ export function createStore() {
           : null,
         placeId: input.placeId ?? null,
         source: input.source ?? 'MANUAL',
-        createdAt: now
+        createdAt: now,
+        updatedAt: now
       };
       state.schedules.set(schedule.id, schedule);
       return clone(schedule);
@@ -219,7 +220,7 @@ export function createStore() {
     updateSchedule(id, patch) {
       const s = state.schedules.get(String(id));
       if (!s) return null;
-      Object.assign(s, patch);
+      Object.assign(s, patch, { updatedAt: new Date().toISOString() });
       return clone(s);
     },
     deleteSchedule(id) {

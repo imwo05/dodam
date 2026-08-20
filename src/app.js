@@ -41,7 +41,8 @@ import {
   patchSchedule,
   deleteSchedule,
   getCopySources,
-  copySchedules
+  copySchedules,
+  getSchedules
 } from './modules/schedules/handlers.js';
 import {
   getPlace,
@@ -133,6 +134,7 @@ const routes = [
   ['GET', '/home', getHome],
 
   // Schedule (정적 경로 먼저)
+  ['GET', '/schedules', getSchedules],
   ['GET', '/schedules/week', getWeekSchedules],
   ['GET', '/schedules/day', getDaySchedules],
   ['GET', '/schedules/copy-sources', getCopySources],
