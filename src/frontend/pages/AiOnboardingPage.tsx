@@ -15,7 +15,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 
 export function AiOnboardingPage() {
   const navigate = useNavigate();
-  const { accessToken } = useAuth();
+  const { accessToken, refreshUser } = useAuth();
   const {
     conversationId,
     messages,
@@ -59,6 +59,7 @@ export function AiOnboardingPage() {
     if (!accessToken || !conversationId || !canComplete || loading) return;
     try {
       await completeConversation(accessToken);
+      await refreshUser(accessToken);
       navigate('/schedule/initial');
     } catch {
       // Context retains the conversation and server error so completion can be retried.

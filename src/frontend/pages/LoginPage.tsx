@@ -107,8 +107,8 @@ export function LoginPage() {
     if (Object.keys(nextErrors).length > 0) return;
 
     try {
-      await login(username.trim(), password);
-      navigate('/home');
+      const result = await login(username.trim(), password);
+      navigate(result.onboardingCompleted ? '/home' : '/onboarding/basic', { replace: true });
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : '로그인하지 못했어요.');
     }

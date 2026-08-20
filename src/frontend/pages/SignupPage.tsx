@@ -43,7 +43,7 @@ export function SignupPage() {
 
     try {
       await signup({ name: values.name.trim(), username: values.username.trim(), password: values.password, email: values.email.trim(), age: Number(values.age) });
-      navigate('/onboarding/basic');
+      navigate('/login', { replace: true });
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : '회원가입을 완료하지 못했어요.');
     }
