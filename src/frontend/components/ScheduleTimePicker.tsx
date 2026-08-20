@@ -34,25 +34,26 @@ function WheelColumn({ label, value, values, onChange }: WheelColumnProps) {
   );
 }
 
-function isAllowed(meridiem: Meridiem, hour: number, minute: number, minCanonical: string | null | undefined) {
+function isAllowed(meridiem: Meridiem, hour: number, minute: number, minCanonical: string | null | undefined, minuteStep: number) {
+  if (minute % minuteStep !== 0) return false;
   if (!minCanonical) return true;
   return timeToMinutes(twelveHourToCanonical(meridiem, hour, minute)) > timeToMinutes(minCanonical);
 }
 
-function findFirstAllowed(meridiem: Meridiem, minCanonical: string | null | undefined) {
+function findFirstAllowed(meridiem: Meridiem, minCanonical: string | null | undefined, minuteStep: number) {
   for (let hour = 1; hour <= 12; hour += 1) {
-    for (let minute = 0; minute < 60; minute += 1) {
-      if (isAllowed(meridiem, hour, minute, minCanonical)) return { hour, minute };
+    for (let minute = 0; minute < 60; minute += minuteStep) {
+      if (isAllowed(meridiem, hour, minute, minCanonical, minuteStep)) return { hour, minute };
     }
   }
   return null;
 }
 
-export function ScheduleTimePicker({ value, onChange, onClose, minCanonical }: { value: string; onChange: (value: string) => void; onClose: () => void; minCanonical?: string | null }) {
+export function ScheduleTimePicker({ value, onChange, onClose, minCanonical, minuteStep = 1 }: { value: string; onChange: (value: string) => void; onClose: () => void; minCanonical?: string | null; minuteStep?: number }) {
   const parsed = isCanonicalTime(value) ? canonicalTo12Hour(value) : { meridiem: 'AM' as const, hour: 9, minute: 0 };
-  const firstAvailablePeriod = findFirstAllowed(parsed.meridiem, minCanonical) ? parsed.meridiem : (findFirstAllowed('AM', minCanonical) ? 'AM' : 'PM');
-  const firstAvailable = findFirstAllowed(firstAvailablePeriod, minCanonical);
-  const selected = isAllowed(parsed.meridiem, parsed.hour, parsed.minute, minCanonical) ? parsed : (firstAvailable ? { ...firstAvailable, meridiem: firstAvailablePeriod as Meridiem } : parsed);
+  const firstAvailablePeriod = findFirstAllowed(parsed.meridiem, minCanonical, minuteStep) ? parsed.meridiem : (findFirstAllowed('AM', minCanonical, minuteStep) ? 'AM' : 'PM');
+  const firstAvailable = findFirstAllowed(firstAvailablePeriod, minCanonical, minuteStep);
+  const selected = isAllowed(parsed.meridiem, parsed.hour, parsed.minute, minCanonical, minuteStep) ? parsed : (firstAvailable ? { ...firstAvailable, meridiem: firstAvailablePeriod as Meridiem } : parsed);
   const [hourText, setHourText] = useState(String(selected.hour));
   const [minuteText, setMinuteText] = useState(String(selected.minute).padStart(2, '0'));
   const [error, setError] = useState('');
@@ -62,13 +63,13 @@ export function ScheduleTimePicker({ value, onChange, onClose, minCanonical }: {
     setMinuteText(String(selected.minute).padStart(2, '0'));
   }, [selected.hour, selected.minute, selected.meridiem]);
 
-  const allowedPeriods = useMemo(() => (['AM', 'PM'] as Meridiem[]).filter((period) => findFirstAllowed(period, minCanonical)), [minCanonical]);
-  const allowedHours = useMemo(() => Array.from({ length: 12 }, (_, index) => index + 1).filter((hour) => Array.from({ length: 60 }, (_, minute) => minute).some((minute) => isAllowed(selected.meridiem, hour, minute, minCanonical))), [minCanonical, selected.meridiem]);
-  const allowedMinutes = useMemo(() => Array.from({ length: 60 }, (_, minute) => minute).filter((minute) => isAllowed(selected.meridiem, selected.hour, minute, minCanonical)), [minCanonical, selected.hour, selected.meridiem]);
+  const allowedPeriods = useMemo(() => (['AM', 'PM'] as Meridiem[]).filter((period) => findFirstAllowed(period, minCanonical, minuteStep)), [minCanonical, minuteStep]);
+  const allowedHours = useMemo(() => Array.from({ length: 12 }, (_, index) => index + 1).filter((hour) => Array.from({ length: 60 / minuteStep }, (_, index) => index * minuteStep).some((minute) => isAllowed(selected.meridiem, hour, minute, minCanonical, minuteStep))), [minCanonical, minuteStep, selected.meridiem]);
+  const allowedMinutes = useMemo(() => Array.from({ length: 60 / minuteStep }, (_, index) => index * minuteStep).filter((minute) => isAllowed(selected.meridiem, selected.hour, minute, minCanonical, minuteStep)), [minCanonical, minuteStep, selected.hour, selected.meridiem]);
 
   function setPart(nextMeridiem: Meridiem, nextHour: number, nextMinute: number) {
-    if (!isAllowed(nextMeridiem, nextHour, nextMinute, minCanonical)) {
-      const first = findFirstAllowed(nextMeridiem, minCanonical);
+    if (!isAllowed(nextMeridiem, nextHour, nextMinute, minCanonical, minuteStep)) {
+      const first = findFirstAllowed(nextMeridiem, minCanonical, minuteStep);
       if (!first) return;
       nextHour = first.hour;
       nextMinute = first.minute;
@@ -84,13 +85,14 @@ export function ScheduleTimePicker({ value, onChange, onClose, minCanonical }: {
       setError('시간은 1~12시, 분은 00~59분으로 입력해 주세요.');
       return false;
     }
-    if (!isAllowed(selected.meridiem, hour, minute, minCanonical)) {
+    const normalizedMinute = minuteStep > 1 ? Math.min(59 - ((59 - minute) % minuteStep), Math.round(minute / minuteStep) * minuteStep) : minute;
+    if (!isAllowed(selected.meridiem, hour, normalizedMinute, minCanonical, minuteStep)) {
       setError('종료 시간은 시작 시간보다 늦어야 해요.');
       return false;
     }
-    setPart(selected.meridiem, hour, minute);
+    setPart(selected.meridiem, hour, normalizedMinute);
     setHourText(String(hour));
-    setMinuteText(String(minute).padStart(2, '0'));
+    setMinuteText(String(normalizedMinute).padStart(2, '0'));
     return true;
   }
 
@@ -109,7 +111,7 @@ export function ScheduleTimePicker({ value, onChange, onClose, minCanonical }: {
         <div className="schedule-wheel__meridiem" role="group" aria-label="오전 오후">
           {(['AM', 'PM'] as Meridiem[]).map((period) => (
             <button key={period} type="button" className={selected.meridiem === period ? 'is-selected' : ''} disabled={!allowedPeriods.includes(period)} aria-pressed={selected.meridiem === period} onClick={() => {
-              const first = findFirstAllowed(period, minCanonical);
+              const first = findFirstAllowed(period, minCanonical, minuteStep);
               setPart(period, first?.hour ?? selected.hour, first?.minute ?? selected.minute);
             }}>{period === 'AM' ? '오전' : '오후'}</button>
           ))}

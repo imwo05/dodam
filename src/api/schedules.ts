@@ -4,6 +4,19 @@ export type SelfCareCategory = 'EXERCISE' | 'DIET' | 'WALK' | 'RUNNING' | 'MENTA
 
 export type Schedule = {
   id: string;
+  userId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  title: string;
+  isFixed: boolean;
+  selfCareCategory?: SelfCareCategory | null;
+  source?: string;
+  createdAt: string;
+  updatedAt: string | null;
+};
+
+export type ScheduleWriteInput = {
   date: string;
   startTime: string;
   endTime: string;
@@ -12,16 +25,7 @@ export type Schedule = {
   selfCareCategory?: SelfCareCategory | null;
 };
 
-export type ScheduleInput = Omit<Schedule, 'id'>;
-
-export type ScheduleWriteInput = {
-  date: string;
-  startTime: string;
-  endTime?: string | null;
-  title: string;
-  isFixed: boolean;
-  selfCareCategory?: SelfCareCategory | null;
-};
+export type ScheduleInput = ScheduleWriteInput;
 
 type BackendSchedule = Schedule & {
   location?: unknown;
@@ -30,6 +34,7 @@ type BackendSchedule = Schedule & {
 };
 
 type DayResponse = { date: string; schedules: BackendSchedule[] };
+type RangeResponse = { from: string; to: string; schedules: BackendSchedule[] };
 
 function authHeaders(accessToken: string) {
   return { Authorization: `Bearer ${accessToken}` };
@@ -38,12 +43,16 @@ function authHeaders(accessToken: string) {
 function normalizeSchedule(schedule: BackendSchedule): Schedule {
   return {
     id: schedule.id,
+    userId: schedule.userId,
     date: schedule.date,
     startTime: schedule.startTime,
-    endTime: schedule.endTime ?? '',
+    endTime: schedule.endTime,
     title: schedule.title,
     isFixed: schedule.isFixed,
-    selfCareCategory: schedule.selfCareCategory ?? null
+    selfCareCategory: schedule.selfCareCategory ?? null,
+    source: schedule.source,
+    createdAt: schedule.createdAt,
+    updatedAt: schedule.updatedAt ?? null
   };
 }
 
@@ -53,13 +62,19 @@ export function getDaySchedules(accessToken: string, date: string) {
   }).then((response) => ({ date: response.date, schedules: response.schedules.map(normalizeSchedule) }));
 }
 
-/**
- * The backend week endpoint is SUN-SAT. The UI's main calendar is MON-SUN,
- * so the adapter deliberately reads the seven canonical local dates.
- */
+export function getSchedulesRange(accessToken: string, from: string, to: string) {
+  return apiRequest<RangeResponse>(`/schedules?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
+    headers: authHeaders(accessToken)
+  }).then((response) => ({ from: response.from, to: response.to, schedules: response.schedules.map(normalizeSchedule) }));
+}
+
+/** Load arbitrary displayed dates through one inclusive backend range request. */
 export async function getSchedulesForDates(accessToken: string, dates: string[]) {
-  const days = await Promise.all(dates.map((date) => getDaySchedules(accessToken, date)));
-  return days.flatMap((day) => day.schedules);
+  const uniqueDates = [...new Set(dates)].filter(Boolean).sort();
+  if (!uniqueDates.length) return [];
+  const response = await getSchedulesRange(accessToken, uniqueDates[0], uniqueDates[uniqueDates.length - 1]);
+  const dateSet = new Set(uniqueDates);
+  return response.schedules.filter((schedule) => dateSet.has(schedule.date));
 }
 
 export function createSchedule(accessToken: string, input: ScheduleWriteInput) {

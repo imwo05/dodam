@@ -33,7 +33,7 @@ export function DailySchedulePage() {
         <div className="daily-schedule-list" aria-live="polite">
           {loading ? <p className="schedule-empty">일정을 불러오는 중이에요.</p> : null}
           {!loading && !selectedSchedules.length ? <p className="schedule-empty">오늘 등록된 일정이 없어요.</p> : null}
-          {selectedSchedules.map((schedule) => <ScheduleChip key={schedule.id} schedule={schedule} onClick={() => navigate(`/schedule/${schedule.id}/edit`, { state: { schedule } })} />)}
+          {selectedSchedules.map((schedule) => <ScheduleChip key={schedule.id} schedule={schedule} onClick={() => navigate(`/schedule/${schedule.id}/edit?date=${encodeURIComponent(schedule.date)}`, { state: { schedule } })} />)}
         </div>
         {error ? <p className="schedule-page__error" role="alert">{error}</p> : null}
         <button className="tape-button schedule-finish-button" type="button" onClick={() => navigate(`/schedule/new?date=${date}`)}><img src="/assets/tape-primary.png" alt="" aria-hidden="true" /><span>일정 추가</span></button>

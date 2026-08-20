@@ -188,6 +188,54 @@ test('invalid structured onboarding output is not applied to the profile', async
   });
 });
 
+test('AI outage continues onboarding with contextual fallback and preserves profile extraction', async () => {
+  const aiClient = {
+    async onboardingTurn() {
+      return null;
+    }
+  };
+  await withServer(aiClient, async (base) => {
+    const { token } = await createUser(base);
+    const headers = auth(token);
+    const conversation = await request(base, '/onboarding/conversations', {
+      method: 'POST',
+      headers,
+      body: '{}'
+    });
+    const id = data(conversation).conversation.id;
+    const initialAssistant = data(conversation).assistantMessage.content;
+    assert.match(initialAssistant, /일정이 바뀌어도 실제로 할 수 있는 자기관리 방법/);
+    assert.doesNotMatch(initialAssistant, /잠시 후 다시|안전하게 저장/);
+
+    const first = await request(base, '/onboarding/conversations/' + id + '/messages', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ content: '야근하면 운동을 포기해요.' })
+    });
+    assert.equal(first.status, 200);
+    const firstData = data(first);
+    assert.equal(firstData.aiFallback, true);
+    assert.equal(firstData.canComplete, false);
+    assert.deepEqual(firstData.profile.selfCareGoals, ['EXERCISE']);
+    assert.deepEqual(firstData.profile.planChangeReasons, ['OVERTIME']);
+    assert.deepEqual(firstData.profile.difficultyAfterPlanChange, ['GIVE_UP_ACTIVITY']);
+    assert.doesNotMatch(firstData.assistantMessage.content, /잠시 후 다시|안전하게 저장/);
+
+    const second = await request(base, '/onboarding/conversations/' + id + '/messages', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ content: '20~30분 정도면 괜찮아요.' })
+    });
+    assert.equal(second.status, 200);
+    const secondData = data(second);
+    assert.equal(secondData.aiFallback, true);
+    assert.deepEqual(secondData.profile.availableFallbackMinutes, { min: 20, max: 30 });
+    assert.equal(secondData.canComplete, true);
+    assert.notEqual(firstData.assistantMessage.content, secondData.assistantMessage.content);
+    assert.doesNotMatch(secondData.assistantMessage.content, /잠시 후 다시|안전하게 저장/);
+  });
+});
+
 test('Plan B receives saved personalization and hard constraints remain authoritative', async () => {
   let planPayload = null;
   const aiClient = {

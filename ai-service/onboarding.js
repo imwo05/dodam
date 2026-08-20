@@ -14,18 +14,30 @@ const PROFILE_FIELDS = [
   'aiStyle'
 ];
 
-const SLOT_LABELS = new Set([
+const MINIMUM_MISSING_SLOTS = [
   'selfCareGoals',
   'selfCareDifficultyReasons',
-  'planChangeReasons',
-  'difficultyAfterPlanChange',
   'availableFallbackMinutes',
-  'preferredActivities',
-  'preferredAtmospheres',
-  'avoidAtmospheres',
-  'preferredIntensity',
-  'socialPreference'
-]);
+  'preferredActivities_or_preferredAtmospheres'
+];
+
+const DISPLAY_LABELS = {
+  EXERCISE: '운동',
+  RUNNING: '러닝',
+  WALK: '산책',
+  DIET: '식사 관리',
+  MENTAL_HEALTH: '마음 돌보기',
+  STRESS_RELIEF: '스트레스 해소',
+  FATIGUE: '피로',
+  TIME_SHORTAGE: '시간 부족',
+  OVERTIME: '야근',
+  UNEXPECTED_SCHEDULE: '갑작스러운 일정',
+  SOCIAL_COMMITMENT: '약속이나 회식',
+  WEATHER: '날씨',
+  GIVE_UP_ACTIVITY: '활동을 포기하는 것',
+  QUIET: '조용한 곳',
+  CROWDED: '붐비는 곳'
+};
 
 export async function onboardingTurn(payload) {
   const context = payload?.context ?? {};
@@ -49,16 +61,19 @@ export async function onboardingTurn(payload) {
       system,
       JSON.stringify({ context, profile, messages }),
       ONBOARDING_SCHEMA,
-      0.4
+      0.4,
+      {
+        operation: 'onboardingTurn',
+        validate: (value) => sanitizeTurn(value, profile, context)
+      }
     );
-    const sanitized = sanitizeTurn(result);
-    if (sanitized) return { ...sanitized, fallback: false };
+    if (result) return { ...result, fallback: false };
   }
 
   return fallbackOnboardingTurn({ context, profile, messages });
 }
 
-function sanitizeTurn(value) {
+function sanitizeTurn(value, profile = {}, context = {}) {
   if (!value || typeof value !== 'object' || typeof value.assistantMessage !== 'string') return null;
   if (!value.assistantMessage.trim() || value.assistantMessage.length > 2000) return null;
   if (!value.extractedProfilePatch || typeof value.extractedProfilePatch !== 'object') return null;
@@ -67,7 +82,10 @@ function sanitizeTurn(value) {
   const patch = {};
   for (const field of PROFILE_FIELDS) {
     const valueForField = value.extractedProfilePatch[field];
-    if (valueForField !== null && valueForField !== undefined) patch[field] = valueForField;
+    if (valueForField !== null && valueForField !== undefined) {
+      if (Array.isArray(valueForField) && valueForField.length === 0) continue;
+      patch[field] = valueForField;
+    }
   }
   if (patch.preferredIntensity != null && !['LOW', 'MEDIUM', 'HIGH'].includes(patch.preferredIntensity)) return null;
   if (patch.socialPreference != null && !['SOLO', 'SOCIAL', 'ANY'].includes(patch.socialPreference)) return null;
@@ -79,31 +97,34 @@ function sanitizeTurn(value) {
   for (const field of PROFILE_FIELDS.filter((item) => !['availableFallbackMinutes', 'preferredIntensity', 'socialPreference', 'aiStyle'].includes(item))) {
     if (patch[field] != null && (!Array.isArray(patch[field]) || patch[field].some((item) => typeof item !== 'string'))) return null;
   }
+  const merged = { ...profile, ...patch };
+  const missingSlots = missingSlotsFor(merged);
   return {
-    assistantMessage: value.assistantMessage.trim(),
+    assistantMessage: missingSlots.length === 0
+      ? completionMessage(merged, context)
+      : value.assistantMessage.trim(),
     extractedProfilePatch: patch,
-    missingSlots: value.missingSlots.filter((slot) => SLOT_LABELS.has(slot)),
-    completed: value.completed
+    missingSlots,
+    completed: missingSlots.length === 0
   };
 }
 
-function fallbackOnboardingTurn({ context, profile, messages }) {
+export function fallbackOnboardingTurn({ context, profile, messages }) {
   const lastUserMessage = [...messages].reverse().find((message) => message.role === 'USER')?.content ?? '';
   const extractedProfilePatch = extractFallbackPatch(lastUserMessage);
   const merged = { ...profile, ...extractedProfilePatch };
   const missingSlots = missingSlotsFor(merged);
+  const completed = messages.length > 0 && missingSlots.length === 0;
   const assistantMessage = messages.length === 0
-    ? '요즘, 나를 위해 가장 챙기고 싶은 건 무엇인가요?'
-    : missingSlots.length
-      ? nextFallbackQuestion(missingSlots[0])
-      : (context.aiStyle === 'T'
-        ? '현재 답변을 바탕으로 실행 가능한 Plan B를 연결할 수 있습니다.'
-        : '알겠어요. 지금까지 말씀해주신 내용을 바탕으로 무리 없이 이어갈 방법을 찾아볼게요.');
+    ? initialFallbackMessage(merged, missingSlots)
+    : completed
+      ? completionMessage(merged, context)
+      : nextFallbackQuestion(missingSlots, merged, messages);
   return {
-    assistantMessage,
+    assistantMessage: avoidImmediateRepeat(assistantMessage, merged, messages),
     extractedProfilePatch,
     missingSlots,
-    completed: false,
+    completed,
     fallback: true
   };
 }
@@ -112,17 +133,52 @@ function fallbackOnboardingTurn({ context, profile, messages }) {
 function extractFallbackPatch(text) {
   const value = String(text);
   const patch = {};
-  if (/스트레스|불안|마음/.test(value)) patch.selfCareGoals = ['STRESS_RELIEF'];
-  if (/야근|잔업|늦게 퇴근/.test(value)) patch.planChangeReasons = ['OVERTIME'];
-  if (/피곤|피로|지쳐|기운이 없/.test(value)) patch.selfCareDifficultyReasons = ['FATIGUE'];
-  if (/포기|못 하|중단|그만/.test(value)) patch.difficultyAfterPlanChange = ['GIVE_UP_ACTIVITY'];
-  if (/운동|헬스|근력/.test(value)) patch.preferredActivities = ['EXERCISE'];
-  if (/산책|걷/.test(value)) patch.preferredActivities = ['WALK'];
-  if (/조용|차분/.test(value)) patch.preferredAtmospheres = ['QUIET'];
-  if (/붐비|시끄럽|복잡/.test(value)) patch.avoidAtmospheres = ['CROWDED'];
+  const add = (field, item) => {
+    patch[field] = [...new Set([...(patch[field] ?? []), item])];
+  };
+
+  if (/스트레스|불안|마음이 힘들|번아웃/.test(value)) add('selfCareGoals', 'STRESS_RELIEF');
+  if (/운동|헬스|근력/.test(value)) {
+    add('selfCareGoals', 'EXERCISE');
+    add('preferredActivities', 'EXERCISE');
+  }
+  if (/러닝|달리|조깅|뛰/.test(value)) {
+    add('selfCareGoals', 'RUNNING');
+    add('preferredActivities', 'RUNNING');
+  }
+  if (/산책|걷/.test(value)) {
+    add('selfCareGoals', 'WALK');
+    add('preferredActivities', 'WALK');
+  }
+  if (/식단|식사|끼니|다이어트/.test(value)) {
+    add('selfCareGoals', 'DIET');
+    add('preferredActivities', 'DIET');
+  }
+  if (/명상|호흡|마음챙김/.test(value)) {
+    add('selfCareGoals', 'MENTAL_HEALTH');
+    add('preferredActivities', 'MENTAL_HEALTH');
+  }
+
+  if (/야근|잔업|늦게 퇴근/.test(value)) add('planChangeReasons', 'OVERTIME');
+  if (/약속|회식|사람을 만나|친구/.test(value)) add('planChangeReasons', 'SOCIAL_COMMITMENT');
+  if (/비가|비 오|날씨/.test(value)) add('planChangeReasons', 'WEATHER');
+  if (/갑자기|예상 못|일정이 바뀌|일정이 생기/.test(value)) add('planChangeReasons', 'UNEXPECTED_SCHEDULE');
+  if (/시간이 없|바빠|촉박|늦어/.test(value)) {
+    add('planChangeReasons', 'TIME_SHORTAGE');
+    add('selfCareDifficultyReasons', 'TIME_SHORTAGE');
+  }
+  if (/피곤|피로|지쳐|기운이 없/.test(value)) add('selfCareDifficultyReasons', 'FATIGUE');
+  if (/동기가 없|귀찮|의욕이 없/.test(value)) add('selfCareDifficultyReasons', 'LOW_MOTIVATION');
+  if (/포기|못 하|못해|중단|그만|미뤄/.test(value)) add('difficultyAfterPlanChange', 'GIVE_UP_ACTIVITY');
+
+  if (/가볍|저강도|부담 없|짧게/.test(value)) patch.preferredIntensity = 'LOW';
+  else if (/세게|고강도|강하게/.test(value)) patch.preferredIntensity = 'HIGH';
+
+  if (/조용|차분|한적|고요/.test(value)) add('preferredAtmospheres', 'QUIET');
+  if (/밖|야외|공원/.test(value)) add('preferredAtmospheres', 'OUTDOOR');
+  if (/붐비|시끄럽|복잡|사람이 많/.test(value)) add('avoidAtmospheres', 'CROWDED');
   if (/혼자|혼자서/.test(value)) patch.socialPreference = 'SOLO';
   if (/같이|친구|사람들과/.test(value)) patch.socialPreference = 'SOCIAL';
-  if (/가볍|저강도|부담 없/.test(value)) patch.preferredIntensity = 'LOW';
   const range = value.match(/(\d{1,3})\s*(?:~|-|에서)\s*(\d{1,3})\s*분/);
   const single = value.match(/(\d{1,3})\s*분/);
   if (range) patch.availableFallbackMinutes = { min: Number(range[1]), max: Number(range[2]) };
@@ -131,21 +187,109 @@ function extractFallbackPatch(text) {
 }
 
 function missingSlotsFor(profile) {
-  const missing = [];
-  if (!profile.selfCareGoals?.length) missing.push('selfCareGoals');
-  if (!profile.selfCareDifficultyReasons?.length && !profile.difficultyAfterPlanChange?.length) missing.push('selfCareDifficultyReasons');
-  if (!profile.availableFallbackMinutes) missing.push('availableFallbackMinutes');
-  if (!profile.preferredActivities?.length && !profile.preferredAtmospheres?.length) missing.push('preferredActivities_or_preferredAtmospheres');
-  return missing;
+  return MINIMUM_MISSING_SLOTS.filter((slot) => {
+    if (slot === 'selfCareGoals') return !profile.selfCareGoals?.length;
+    if (slot === 'selfCareDifficultyReasons') {
+      return !profile.selfCareDifficultyReasons?.length && !profile.difficultyAfterPlanChange?.length;
+    }
+    if (slot === 'availableFallbackMinutes') return !profile.availableFallbackMinutes;
+    return !profile.preferredActivities?.length && !profile.preferredAtmospheres?.length;
+  });
 }
 
-function nextFallbackQuestion(slot) {
-  return {
-    selfCareGoals: '요즘 나를 위해 가장 챙기고 싶은 것은 무엇인가요?',
-    selfCareDifficultyReasons: '자기관리를 이어가기 어려운 순간에는 보통 어떤 일이 있나요?',
-    availableFallbackMinutes: '계획이 바뀐 날에도 부담 없이 쓸 수 있는 시간은 어느 정도인가요?',
-    preferredActivities_or_preferredAtmospheres: '그 시간에 편하게 할 수 있는 활동이나 분위기는 어떤 쪽인가요?'
-  }[slot] ?? '자기관리에 대해 조금 더 알려주실 수 있을까요?';
+function initialFallbackMessage(profile, missingSlots) {
+  const opening = '일정이 바뀌어도 실제로 할 수 있는 자기관리 방법을 찾으려고 몇 가지만 물어볼게요.';
+  return `${opening} ${nextFallbackQuestion(missingSlots, profile, [])}`;
+}
+
+function nextFallbackQuestion(missingSlots, profile, messages) {
+  const recentAssistantMessages = messages
+    .filter((message) => message.role === 'ASSISTANT')
+    .slice(-6)
+    .map((message) => String(message.content ?? ''));
+  const nextSlot = missingSlots.find((slot) => !askedConcept(recentAssistantMessages, slot));
+  if (!nextSlot) return contextualContinuation(profile, messages);
+  return questionForSlot(nextSlot, profile);
+}
+
+function questionForSlot(slot, profile) {
+  if (slot === 'selfCareGoals') {
+    return profile.planChangeReasons?.length || profile.difficultyAfterPlanChange?.length
+      ? '그런 날에도 가능하면 놓치고 싶지 않은 건 뭐예요?'
+      : '요즘 가장 챙기고 싶은 건 뭐예요?';
+  }
+  if (slot === 'selfCareDifficultyReasons') {
+    const goal = displayFirst(profile.selfCareGoals, '자기관리');
+    return `${goal}을 이어가기 어려워지는 건 보통 어떤 때예요?`;
+  }
+  if (slot === 'availableFallbackMinutes') {
+    return profile.planChangeReasons?.length || profile.difficultyAfterPlanChange?.length
+      ? '그럴 때 완전히 쉬는 것보다 짧게라도 할 수 있다면, 몇 분 정도가 부담 없을까요?'
+      : '계획이 바뀐 날에도 부담 없이 쓸 수 있는 시간은 몇 분쯤일까요?';
+  }
+  if (slot === 'preferredActivities_or_preferredAtmospheres') {
+    const time = formatMinutes(profile.availableFallbackMinutes);
+    return time
+      ? `${time} 정도라면 몸을 움직이는 게 좋아요, 조용히 쉬는 게 좋아요?`
+      : '짧은 시간에 편하게 할 수 있는 활동이나 분위기는 어떤 쪽이에요?';
+  }
+  return '자기관리에 대해 조금 더 알려주실 수 있을까요?';
+}
+
+function askedConcept(messages, slot) {
+  const patterns = {
+    selfCareGoals: /가장 챙기고 싶은|놓치고 싶지 않은/,
+    selfCareDifficultyReasons: /이어가기 어려|어려워지는|어떤 때/,
+    availableFallbackMinutes: /몇 분|시간은.*부담|시간은.*현실/,
+    preferredActivities_or_preferredAtmospheres: /몸을 움직이는|조용히 쉬|활동이나 분위기/
+  };
+  return messages.some((message) => patterns[slot]?.test(message));
+}
+
+function contextualContinuation(profile, messages) {
+  const goal = displayFirst(profile.selfCareGoals, '자기관리');
+  const time = formatMinutes(profile.availableFallbackMinutes);
+  const lastUserMessage = [...messages].reverse().find((message) => message.role === 'USER')?.content ?? '';
+  if (time) return `${time} 정도가 현실적이군요. 그 시간에 ${goal}을 이어가려면 어떤 방식이 가장 편할까요?`;
+  if (/모르|잘 모르|아직/.test(String(lastUserMessage))) {
+    return `${goal}을 놓치지 않으면서도 무리하지 않는 방법부터 찾아볼게요. 아주 짧게 시작한다면 어떤 게 괜찮을까요?`;
+  }
+  return `${goal}을 챙기고 싶군요. 계획이 어긋난 날에도 이어갈 수 있는 방법을 함께 골라볼까요?`;
+}
+
+function avoidImmediateRepeat(message, profile, messages) {
+  const lastAssistantMessage = [...messages].reverse().find((item) => item.role === 'ASSISTANT')?.content;
+  if (lastAssistantMessage !== message) return message;
+  const goal = displayFirst(profile.selfCareGoals, '자기관리');
+  return `${goal}을 이어갈 기준은 잡혔어요. 이 기준으로 현실적인 대안을 찾아볼게요.`;
+}
+
+function completionMessage(profile, context) {
+  const goal = displayFirst(profile.selfCareGoals, '자기관리');
+  const time = formatMinutes(profile.availableFallbackMinutes) ?? '짧은 시간';
+  const setting = profile.preferredAtmospheres?.length
+    ? displayFirst(profile.preferredAtmospheres, '편한 곳')
+    : profile.socialPreference === 'SOLO'
+      ? '혼자'
+      : profile.socialPreference === 'SOCIAL'
+        ? '누군가와 함께'
+        : '편한 방식으로';
+  const disruption = displayFirst(profile.planChangeReasons, null);
+  const prefix = disruption ? `${disruption}로 계획이 바뀌어도` : '계획이 바뀌어도';
+  if (context.aiStyle === 'T') {
+    return `${prefix} ${goal}을 이어가고, ${time} 정도 ${setting} 할 수 있는 대안이 현실적이겠어요. 이 기준으로 찾아볼게요.`;
+  }
+  return `${prefix} ${goal}은 이어가고 싶고, ${time} 정도 ${setting} 할 수 있으면 괜찮겠어요. 이 기준으로 무리 없는 방법을 찾아볼게요.`;
+}
+
+function displayFirst(values, fallback) {
+  const value = Array.isArray(values) ? values.find(Boolean) : values;
+  return value ? (DISPLAY_LABELS[value] ?? String(value).toLowerCase()) : fallback;
+}
+
+function formatMinutes(value) {
+  if (!value || !Number.isInteger(value.min) || !Number.isInteger(value.max)) return null;
+  return value.min === value.max ? `${value.min}분` : `${value.min}~${value.max}분`;
 }
 
 const nullableStringArray = { type: ['array', 'null'], items: { type: 'string' } };

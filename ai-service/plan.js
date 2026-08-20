@@ -38,9 +38,17 @@ export async function planBPlan(payload) {
 personalization을 사용해 사용자가 실제로 실행할 가능성이 높은 후보를 우선 고려하되, 시간·거리·안전·카테고리 hard constraint를 절대 우회하지 않는다.
 ${styleInstruction}
 반드시 제공된 JSON schema에 맞는 구조화된 JSON만 반환한다.`;
-    const result = await chatJson(system, JSON.stringify({ context, candidates }), PLAN_B_SCHEMA, 0.4);
-    const sanitized = sanitizePlan(result, context, candidates, maxStops);
-    if (sanitized) return sanitized;
+    const result = await chatJson(
+      system,
+      JSON.stringify({ context, candidates }),
+      PLAN_B_SCHEMA,
+      0.4,
+      {
+        operation: 'planBPlan',
+        validate: (value) => sanitizePlan(value, context, candidates, maxStops)
+      }
+    );
+    if (result) return result;
   }
 
   return fallbackPlan(context, candidates, maxStops);
