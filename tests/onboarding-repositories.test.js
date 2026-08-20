@@ -24,7 +24,13 @@ test('supabase repository fresh-reads and merges personalization fields', async 
   const client = createFakeSupabaseClient();
   const first = createRepositories({ supabaseClient: client, store: createMemoryStore() });
   await first.profile.setSelfCareProfile('usr_001', {
+    purpose: '스트레스 관리',
+    weeklyTargetCount: 3,
+    availableMinutes: 60,
+    residentialRegion: 'GWANAK',
+    lifeRegion: 'JONGNO',
     selfCareGoals: ['sleep'],
+    planChangeReasons: ['FATIGUE'],
     preferredActivities: ['WALK'],
     availableFallbackMinutes: { min: 20, max: 40 }
   });
@@ -33,12 +39,23 @@ test('supabase repository fresh-reads and merges personalization fields', async 
   const fresh = await second.profile.getSelfCareProfile('usr_001');
   assert.deepEqual(fresh.selfCareGoals, ['sleep']);
   assert.deepEqual(fresh.preferredActivities, ['WALK']);
+  assert.equal(fresh.availableMinutes, 60);
+  assert.equal(fresh.residentialRegion, 'GWANAK');
 
-  await second.profile.setSelfCareProfile('usr_001', { preferredAtmospheres: ['QUIET'] });
+  await second.profile.setSelfCareProfile('usr_001', {
+    purpose: '기분 전환',
+    preferredAtmospheres: ['QUIET'],
+    preferredIntensity: null,
+    socialPreference: null
+  });
   const merged = await first.profile.getSelfCareProfile('usr_001');
+  assert.equal(client.tables.personalization_profiles.length, 1);
+  assert.equal(merged.purpose, '기분 전환');
   assert.deepEqual(merged.preferredActivities, ['WALK']);
   assert.deepEqual(merged.preferredAtmospheres, ['QUIET']);
   assert.deepEqual(merged.availableFallbackMinutes, { min: 20, max: 40 });
+  assert.equal(merged.preferredIntensity, null);
+  assert.equal(merged.socialPreference, null);
 });
 
 test('supabase repository persists conversation ownership and ordered messages', async () => {
