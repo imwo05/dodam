@@ -55,3 +55,13 @@ Node 20 이상 필요. 별도 설치 패키지 없음.
 인증이 필요한 요청은 헤더에 `Authorization: Bearer {accessToken}`.
 
 > ⚠️ `.env`, `ai-service/.env` 는 절대 커밋하지 말 것 (OpenAI 키 포함). `.gitignore` 에 등록되어 있음.
+
+## 장소 DB 베타
+
+서초·종로 생활권의 Point / Segment / Experience 원본은 `data/`에서 관리합니다.
+
+```bash
+npm run validate:place-db
+```
+
+네이버 API 환경변수와 수집 규칙은 [docs/place-db.md](docs/place-db.md)를 참고하세요.

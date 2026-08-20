@@ -49,6 +49,7 @@ import {
   getScheduleRecommendations
 } from './modules/places/handlers.js';
 import { searchAddresses, reverseGeocode } from './modules/geo/handlers.js';
+import { buildNaverGeoClient } from './modules/geo/naver.js';
 import {
   createRecommendations,
   getSession,
@@ -206,6 +207,7 @@ export function createRequestHandler(options = {}) {
       apiKey: options.aiApiKey ?? process.env.AI_RECOMMENDATION_API_KEY,
       fetchImpl: options.fetchImpl
     });
+  const naverGeoClient = options.naverGeoClient ?? buildNaverGeoClient({ fetchImpl: options.fetchImpl });
 
   return async function handleRequest(req, res) {
     try {
@@ -228,7 +230,8 @@ export function createRequestHandler(options = {}) {
         params: route.params,
         store,
         auth,
-        aiClient
+        aiClient,
+        naverGeoClient
       };
 
       const result = await route.handler(context);
