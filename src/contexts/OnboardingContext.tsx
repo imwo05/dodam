@@ -64,12 +64,20 @@ function normalizeProfile(profile?: Partial<PersonalizationProfile> | null): Per
   };
 }
 
+function uniqueMessages(messages: ChatMessage[]) {
+  const byId = new Map<string, ChatMessage>();
+  for (const message of messages) {
+    if (message?.id) byId.set(message.id, message);
+  }
+  return [...byId.values()];
+}
+
 function responseMessages(response: ConversationResponse) {
-  if (response.messages) return response.messages;
-  return [
+  if (response.messages) return uniqueMessages(response.messages);
+  return uniqueMessages([
     ...(response.userMessage ? [response.userMessage] : []),
     ...(response.assistantMessage ? [response.assistantMessage] : [])
-  ];
+  ]);
 }
 
 function errorMessage(error: unknown) {
@@ -144,11 +152,11 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     try {
       const response = await sendOnboardingMessage(accessToken, conversationId, trimmed);
       applyConversationResponse(response);
-      setMessages(response.messages ?? [
+      setMessages(response.messages ? uniqueMessages(response.messages) : uniqueMessages([
         ...messages,
         ...(response.userMessage ? [response.userMessage] : []),
         ...(response.assistantMessage ? [response.assistantMessage] : [])
-      ]);
+      ]));
     } catch (requestError) {
       setError(errorMessage(requestError));
       throw requestError;

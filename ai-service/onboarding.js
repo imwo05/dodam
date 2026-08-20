@@ -21,6 +21,8 @@ const MINIMUM_MISSING_SLOTS = [
   'preferredActivities_or_preferredAtmospheres'
 ];
 
+export const MAX_USER_ANSWERS = 6;
+
 const DISPLAY_LABELS = {
   EXERCISE: '운동',
   RUNNING: '러닝',
@@ -64,7 +66,7 @@ export async function onboardingTurn(payload) {
       0.4,
       {
         operation: 'onboardingTurn',
-        validate: (value) => sanitizeTurn(value, profile, context)
+        validate: (value) => sanitizeTurn(value, profile, context, messages)
       }
     );
     if (result) return { ...result, fallback: false };
@@ -73,7 +75,7 @@ export async function onboardingTurn(payload) {
   return fallbackOnboardingTurn({ context, profile, messages });
 }
 
-function sanitizeTurn(value, profile = {}, context = {}) {
+function sanitizeTurn(value, profile = {}, context = {}, messages = []) {
   if (!value || typeof value !== 'object' || typeof value.assistantMessage !== 'string') return null;
   if (!value.assistantMessage.trim() || value.assistantMessage.length > 2000) return null;
   if (!value.extractedProfilePatch || typeof value.extractedProfilePatch !== 'object') return null;
@@ -97,12 +99,16 @@ function sanitizeTurn(value, profile = {}, context = {}) {
   for (const field of PROFILE_FIELDS.filter((item) => !['availableFallbackMinutes', 'preferredIntensity', 'socialPreference', 'aiStyle'].includes(item))) {
     if (patch[field] != null && (!Array.isArray(patch[field]) || patch[field].some((item) => typeof item !== 'string'))) return null;
   }
-  const merged = { ...profile, ...patch };
+  const merged = mergeProfile(profile, patch);
   const missingSlots = missingSlotsFor(merged);
+  const userAnswerCount = messages.filter((message) => message.role === 'USER').length;
+  const assistantMessage = missingSlots.length === 0
+    ? completionMessage(merged, context)
+    : userAnswerCount >= MAX_USER_ANSWERS
+      ? finalRequiredQuestion(missingSlots, merged)
+      : value.assistantMessage.trim();
   return {
-    assistantMessage: missingSlots.length === 0
-      ? completionMessage(merged, context)
-      : value.assistantMessage.trim(),
+    assistantMessage,
     extractedProfilePatch: patch,
     missingSlots,
     completed: missingSlots.length === 0
@@ -112,13 +118,16 @@ function sanitizeTurn(value, profile = {}, context = {}) {
 export function fallbackOnboardingTurn({ context, profile, messages }) {
   const lastUserMessage = [...messages].reverse().find((message) => message.role === 'USER')?.content ?? '';
   const extractedProfilePatch = extractFallbackPatch(lastUserMessage);
-  const merged = { ...profile, ...extractedProfilePatch };
+  const merged = mergeProfile(profile, extractedProfilePatch);
   const missingSlots = missingSlotsFor(merged);
   const completed = messages.length > 0 && missingSlots.length === 0;
+  const userAnswerCount = messages.filter((message) => message.role === 'USER').length;
   const assistantMessage = messages.length === 0
     ? initialFallbackMessage(merged, missingSlots)
     : completed
       ? completionMessage(merged, context)
+      : userAnswerCount >= MAX_USER_ANSWERS
+        ? finalRequiredQuestion(missingSlots, merged)
       : nextFallbackQuestion(missingSlots, merged, messages);
   return {
     assistantMessage: avoidImmediateRepeat(assistantMessage, merged, messages),
@@ -158,6 +167,9 @@ function extractFallbackPatch(text) {
     add('selfCareGoals', 'MENTAL_HEALTH');
     add('preferredActivities', 'MENTAL_HEALTH');
   }
+  if (/차\s*한\s*잔|차를|차와|차랑/.test(value)) add('preferredActivities', 'TEA');
+  if (/책|독서/.test(value)) add('preferredActivities', 'READING');
+  if (/음악/.test(value)) add('preferredActivities', 'MUSIC');
 
   if (/야근|잔업|늦게 퇴근/.test(value)) add('planChangeReasons', 'OVERTIME');
   if (/약속|회식|사람을 만나|친구/.test(value)) add('planChangeReasons', 'SOCIAL_COMMITMENT');
@@ -190,11 +202,40 @@ function missingSlotsFor(profile) {
   return MINIMUM_MISSING_SLOTS.filter((slot) => {
     if (slot === 'selfCareGoals') return !profile.selfCareGoals?.length;
     if (slot === 'selfCareDifficultyReasons') {
-      return !profile.selfCareDifficultyReasons?.length && !profile.difficultyAfterPlanChange?.length;
+      return !profile.selfCareDifficultyReasons?.length
+        && !profile.planChangeReasons?.length
+        && !profile.difficultyAfterPlanChange?.length;
     }
     if (slot === 'availableFallbackMinutes') return !profile.availableFallbackMinutes;
     return !profile.preferredActivities?.length && !profile.preferredAtmospheres?.length;
   });
+}
+
+function mergeProfile(profile, patch) {
+  const current = profile ?? {};
+  const next = patch ?? {};
+  const arrayFields = [
+    'selfCareGoals',
+    'selfCareDifficultyReasons',
+    'planChangeReasons',
+    'difficultyAfterPlanChange',
+    'preferredActivities',
+    'preferredAtmospheres',
+    'avoidAtmospheres'
+  ];
+  const merged = { ...current, ...next };
+  for (const field of arrayFields) {
+    merged[field] = [...new Set([
+      ...(Array.isArray(current[field]) ? current[field] : []),
+      ...(Array.isArray(next[field]) ? next[field] : [])
+    ])];
+  }
+  return merged;
+}
+
+function finalRequiredQuestion(missingSlots, profile) {
+  if (missingSlots.length === 1) return questionForSlot(missingSlots[0], profile);
+  return `마지막으로 ${missingSlots.map((slot) => questionForSlot(slot, profile)).join(' ')} 한 번에 알려주실 수 있을까요?`;
 }
 
 function initialFallbackMessage(profile, missingSlots) {

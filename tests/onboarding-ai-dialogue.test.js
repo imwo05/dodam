@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { onboardingTurn } from '../ai-service/onboarding.js';
+import { fallbackOnboardingTurn, onboardingTurn } from '../ai-service/onboarding.js';
 
 function responseWithContent(content) {
   return {
@@ -85,4 +85,41 @@ test('two consecutive OpenAI failures continue with different deterministic turn
   assert.ok(!second.assistantMessage.includes('잠시 후 다시'));
   assert.deepEqual(second.extractedProfilePatch.availableFallbackMinutes, { min: 20, max: 30 });
   assert.equal(second.completed, true);
+});
+
+test('fallback extracts multiple activities from one natural Korean answer', () => {
+  const result = fallbackOnboardingTurn({
+    context: { aiStyle: 'F' },
+    profile: { selfCareGoals: ['STRESS_RELIEF'] },
+    messages: [{ role: 'USER', content: '차 한 잔 하면서 책 읽고 음악 들으면 힐링돼.' }]
+  });
+
+  assert.deepEqual(result.extractedProfilePatch.preferredActivities, ['TEA', 'READING', 'MUSIC']);
+});
+
+test('six user answers cap AI questioning to the remaining required profile fields', async () => {
+  const result = await withMockedOpenAI(
+    async () => responseWithContent(JSON.stringify({
+      assistantMessage: '선택 사항을 더 알려주세요.',
+      extractedProfilePatch: {},
+      missingSlots: ['avoidAtmospheres'],
+      completed: false
+    })),
+    () => onboardingTurn({
+      context: { aiStyle: 'T' },
+      profile: { selfCareGoals: ['STRESS_RELIEF'] },
+      messages: Array.from({ length: 6 }, (_, index) => [
+        { role: 'ASSISTANT', content: `질문 ${index + 1}` },
+        { role: 'USER', content: `답변 ${index + 1}` }
+      ]).flat()
+    })
+  );
+
+  assert.match(result.assistantMessage, /마지막으로/);
+  assert.deepEqual(result.missingSlots, [
+    'selfCareDifficultyReasons',
+    'availableFallbackMinutes',
+    'preferredActivities_or_preferredAtmospheres'
+  ]);
+  assert.equal(result.completed, false);
 });

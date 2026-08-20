@@ -5,6 +5,7 @@ import { createStore } from '../src/data/store.js';
 import { retrieveCandidates } from '../src/modules/plan-b/candidate-retriever.js';
 import { createDistanceProvider } from '../src/modules/plan-b/distance-provider.js';
 import { createRouteProvider } from '../src/modules/plan-b/route-provider.js';
+import { fallbackOnboardingTurn } from '../ai-service/onboarding.js';
 
 async function withServer(aiClient, fn) {
   const server = createApp({ aiClient, jwtSecret: 'test-secret' });
@@ -233,6 +234,95 @@ test('AI outage continues onboarding with contextual fallback and preserves prof
     assert.equal(secondData.canComplete, true);
     assert.notEqual(firstData.assistantMessage.content, secondData.assistantMessage.content);
     assert.doesNotMatch(secondData.assistantMessage.content, /잠시 후 다시|안전하게 저장/);
+  });
+});
+
+test('four-answer Korean flow accumulates profile, completes, and keeps one assistant message per turn', async () => {
+  const aiClient = {
+    async onboardingTurn(payload) {
+      return fallbackOnboardingTurn(payload);
+    }
+  };
+  await withServer(aiClient, async (base) => {
+    const { token } = await createUser(base);
+    const headers = auth(token);
+    const conversation = await request(base, '/onboarding/conversations', {
+      method: 'POST',
+      headers,
+      body: '{}'
+    });
+    const id = data(conversation).conversation.id;
+    const answers = [
+      '스트레스를 덜 받고 싶어요.',
+      '계획이 틀어지면 그냥 다 포기하게 돼.',
+      '30분 정도.',
+      '차 한 잔 하면서 책 읽고 음악 들으면 힐링돼.'
+    ];
+    let lastResponse = conversation;
+    for (const content of answers) {
+      lastResponse = await request(base, '/onboarding/conversations/' + id + '/messages', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ content })
+      });
+      assert.equal(lastResponse.status, 200);
+    }
+
+    const result = data(lastResponse);
+    assert.equal(result.canComplete, true);
+    assert.deepEqual(result.missingSlots, []);
+    assert.deepEqual(result.profile.selfCareGoals, ['STRESS_RELIEF']);
+    assert.deepEqual(result.profile.difficultyAfterPlanChange, ['GIVE_UP_ACTIVITY']);
+    assert.deepEqual(result.profile.availableFallbackMinutes, { min: 30, max: 30 });
+    assert.deepEqual(result.profile.preferredActivities, ['TEA', 'READING', 'MUSIC']);
+    assert.equal(result.profile.preferredIntensity, null);
+    assert.equal(result.profile.socialPreference, null);
+    assert.doesNotMatch(result.assistantMessage.content, /몇 분|시간은.*부담/);
+
+    const history = await request(base, '/onboarding/conversations/' + id, { headers });
+    const messages = data(history).messages;
+    const assistantMessages = messages.filter((message) => message.role === 'ASSISTANT');
+    assert.equal(assistantMessages.length, answers.length + 1);
+    assert.equal(new Set(assistantMessages.map((message) => message.id)).size, assistantMessages.length);
+  });
+});
+
+test('optional AI missing slots never block backend completion', async () => {
+  const aiClient = {
+    async onboardingTurn() {
+      return {
+        assistantMessage: '좋아요. 이제 준비됐어요.',
+        extractedProfilePatch: profilePatch({
+          selfCareDifficultyReasons: [],
+          difficultyAfterPlanChange: [],
+          preferredActivities: ['TEA'],
+          preferredAtmospheres: [],
+          avoidAtmospheres: [],
+          preferredIntensity: null,
+          socialPreference: null
+        }),
+        missingSlots: ['difficultyAfterPlanChange', 'avoidAtmospheres', 'preferredIntensity', 'socialPreference'],
+        completed: false
+      };
+    }
+  };
+  await withServer(aiClient, async (base) => {
+    const { token } = await createUser(base);
+    const headers = auth(token);
+    const conversation = await request(base, '/onboarding/conversations', {
+      method: 'POST',
+      headers,
+      body: '{}'
+    });
+    const id = data(conversation).conversation.id;
+    const response = await request(base, '/onboarding/conversations/' + id + '/messages', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ content: '준비됐어요.' })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(data(response).canComplete, true);
+    assert.deepEqual(data(response).missingSlots, []);
   });
 });
 

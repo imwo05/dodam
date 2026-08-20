@@ -154,10 +154,7 @@ async function buildConversationResponse(context, user, conversationId, extra = 
   const conversation = extra.conversation ?? await context.repositories.onboarding.findOnboardingConversation(conversationId, user.id);
   const profile = await context.repositories.profile.getSelfCareProfile(user.id) ?? await ensureProfile(context, user);
   const messages = await context.repositories.onboarding.listOnboardingMessages(conversationId);
-  const missingSlots = sanitizeMissingSlots(
-    extra.missingSlots ?? missingRequiredSlots(profile, profile),
-    profile
-  );
+  const missingSlots = missingRequiredSlots(profile, profile);
   return {
     conversation: serializeConversation(conversation),
     ...(extra.userMessage ? { userMessage: serializeMessage(extra.userMessage) } : {}),
@@ -168,23 +165,6 @@ async function buildConversationResponse(context, user, conversationId, extra = 
     canComplete: missingSlots.length === 0,
     ...(extra.fallback ? { aiFallback: true } : {})
   };
-}
-
-function sanitizeMissingSlots(slots, profile) {
-  const required = missingRequiredSlots(profile, profile);
-  const combined = [...new Set([...required, ...(slots ?? [])])];
-  return combined.filter((slot) => !isFilled(profile, slot));
-}
-
-function isFilled(profile, slot) {
-  if (slot === 'preferredActivities_or_preferredAtmospheres') {
-    return Boolean(profile.preferredActivities?.length || profile.preferredAtmospheres?.length);
-  }
-  if (slot === 'selfCareDifficultyReasons') {
-    return Boolean(profile.selfCareDifficultyReasons?.length || profile.difficultyAfterPlanChange?.length);
-  }
-  if (slot === 'availableFallbackMinutes') return Boolean(profile.availableFallbackMinutes);
-  return Array.isArray(profile[slot]) ? profile[slot].length > 0 : profile[slot] != null;
 }
 
 async function findOwnedConversation(context) {

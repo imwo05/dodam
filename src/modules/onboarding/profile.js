@@ -57,17 +57,19 @@ export function normalizePersonalizationPatch(input, { strict = false } = {}) {
 }
 
 export function mergePersonalizationProfile(existing, patch) {
+  const current = existing ?? {};
+  const next = patch ?? {};
   return {
     ...emptyPersonalizationProfile(),
-    ...(existing ?? {}),
-    ...(patch ?? {}),
-    selfCareGoals: [...(patch?.selfCareGoals ?? existing?.selfCareGoals ?? [])],
-    selfCareDifficultyReasons: [...(patch?.selfCareDifficultyReasons ?? existing?.selfCareDifficultyReasons ?? [])],
-    planChangeReasons: [...(patch?.planChangeReasons ?? existing?.planChangeReasons ?? [])],
-    difficultyAfterPlanChange: [...(patch?.difficultyAfterPlanChange ?? existing?.difficultyAfterPlanChange ?? [])],
-    preferredActivities: [...(patch?.preferredActivities ?? existing?.preferredActivities ?? [])],
-    preferredAtmospheres: [...(patch?.preferredAtmospheres ?? existing?.preferredAtmospheres ?? [])],
-    avoidAtmospheres: [...(patch?.avoidAtmospheres ?? existing?.avoidAtmospheres ?? [])]
+    ...current,
+    ...next,
+    selfCareGoals: mergeStringArray(current.selfCareGoals, next.selfCareGoals),
+    selfCareDifficultyReasons: mergeStringArray(current.selfCareDifficultyReasons, next.selfCareDifficultyReasons),
+    planChangeReasons: mergeStringArray(current.planChangeReasons, next.planChangeReasons),
+    difficultyAfterPlanChange: mergeStringArray(current.difficultyAfterPlanChange, next.difficultyAfterPlanChange),
+    preferredActivities: mergeStringArray(current.preferredActivities, next.preferredActivities),
+    preferredAtmospheres: mergeStringArray(current.preferredAtmospheres, next.preferredAtmospheres),
+    avoidAtmospheres: mergeStringArray(current.avoidAtmospheres, next.avoidAtmospheres)
   };
 }
 
@@ -88,8 +90,10 @@ export function profileForResponse(profile) {
 export function missingRequiredSlots(profile, legacyProfile = null) {
   const current = profileForResponse(profile);
   const missing = [];
-  if (!current.selfCareGoals.length && !legacyProfile?.purpose) missing.push('selfCareGoals');
-  if (!current.selfCareDifficultyReasons.length && !current.difficultyAfterPlanChange.length) {
+  if (!current.selfCareGoals.length) missing.push('selfCareGoals');
+  if (!current.selfCareDifficultyReasons.length
+    && !current.planChangeReasons.length
+    && !current.difficultyAfterPlanChange.length) {
     missing.push('selfCareDifficultyReasons');
   }
   if (!current.availableFallbackMinutes) missing.push('availableFallbackMinutes');
@@ -97,6 +101,10 @@ export function missingRequiredSlots(profile, legacyProfile = null) {
     missing.push('preferredActivities_or_preferredAtmospheres');
   }
   return missing;
+}
+
+function mergeStringArray(existing, patch) {
+  return [...new Set([...(Array.isArray(existing) ? existing : []), ...(Array.isArray(patch) ? patch : [])])];
 }
 
 export function canCompleteProfile(profile, legacyProfile = null) {
