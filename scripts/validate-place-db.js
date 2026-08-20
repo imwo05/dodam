@@ -13,7 +13,7 @@ assert.equal(segmentIds.size, segments.length, 'segment_id는 고유해야 합�
 
 for (const place of places) {
   assert.equal(place.place_kind, 'POINT', `${place.place_id}: place_kind는 POINT여야 합니다.`);
-  assert.ok(['서초', '종로'].includes(place.district), `${place.place_id}: 베타 생활권 밖입니다.`);
+  assert.equal(place.district, '관악', `${place.place_id}: 베타 생활권 밖입니다.`);
   assert.ok(Number(place.latitude) >= 37 && Number(place.latitude) <= 38, `${place.place_id}: latitude가 올바르지 않습니다.`);
   assert.ok(Number(place.longitude) >= 126 && Number(place.longitude) <= 128, `${place.place_id}: longitude가 올바르지 않습니다.`);
   for (const field of ['place_name', 'wellness_type', 'address', 'description', 'experience_tip', 'mood_tags']) {

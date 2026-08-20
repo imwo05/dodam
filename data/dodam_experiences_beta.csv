@@ -1,13 +1,7 @@
 experience_id,experience_name,district,place_id,segment_id,scenario,time_of_day,weather,available_minutes,activity_intensity,description,experience_tip,mood_tags,review_status
-exp_seocho_001,야근 후 20분 숲 리셋,서초,pt_seocho_001,sg_seocho_001,야근 후 머리를 식히고 싶을 때,EVENING,CLEAR,25,LOW,양재시민의숲 북문에서 짧게 걸으며 업무 전환을 돕는 경험,운동복이 아니어도 걷기 좋은 평지 위주로 선택하세요,#퇴근후 #숲 #리셋 #혼자좋은,DRAFT
-exp_seocho_002,비 오는 날 조용한 독서,서초,pt_seocho_002,,비가 와도 혼자 쉬고 싶을 때,AFTERNOON,RAIN,60,LOW,서초도서관에서 책을 읽으며 실내에서 리듬을 회복하는 경험,우산 보관과 자료실 운영시간을 먼저 확인하세요,#비오는날 #독서 #조용한,DRAFT
-exp_seocho_003,30분 가벼운 몸풀기,서초,pt_seocho_004,,앉아 있던 몸을 움직이고 싶을 때,EVENING,ANY,45,MEDIUM,공공체육시설에서 무리 없는 유산소와 스트레칭을 하는 경험,첫 방문 전 일일 이용 가능 여부를 확인하세요,#운동 #회복 #퇴근후,DRAFT
-exp_seocho_004,공연 전 15분 문화 산책,서초,pt_seocho_005,sg_seocho_004,공연이나 전시 전 대기 시간이 있을 때,EVENING,ANY,20,LOW,예술의전당 주변을 걸으며 관람 전 긴장을 푸는 경험,공연장 입장 시간보다 여유 있게 되돌아오세요,#문화 #짧은산책 #저녁,DRAFT
-exp_seocho_005,해질녘 강변 호흡,서초,pt_seocho_006,sg_seocho_003,복잡한 생각을 정리하고 싶을 때,SUNSET,CLEAR,30,LOW,반포한강공원 강변에서 속도를 늦추고 풍경을 바라보는 경험,바람과 기온에 맞는 겉옷을 챙기세요,#물가 #해질녘 #휴식,DRAFT
-exp_seocho_006,혼자 집중하는 반나절,서초,pt_seocho_008,,집 밖에서 차분히 집중하고 싶을 때,MORNING,ANY,120,LOW,국립중앙도서관에서 자료를 읽거나 개인 작업에 몰입하는 경험,이용자 등록과 자료실 규정을 확인하세요,#집중 #실내 #혼자좋은,DRAFT
-exp_jongno_001,점심 후 청계천 걷기,종로,pt_jongno_001,sg_jongno_001,식사 후 가볍게 걷고 싶을 때,AFTERNOON,CLEAR,25,LOW,청계천 물길을 따라 천천히 걸으며 오후를 전환하는 경험,혼잡한 구간보다 짧은 왕복 동선을 정해두세요,#도심산책 #물가 #점심후,DRAFT
-exp_jongno_002,조용한 청년공간 숨 고르기,종로,pt_jongno_003,,진로와 생활 정보를 찾으며 잠시 쉬고 싶을 때,AFTERNOON,ANY,40,LOW,서울청년센터 종로에서 지원 정보를 확인하고 잠시 머무는 경험,방문 전 해당일 이용 가능한 공간을 확인하세요,#청년공간 #실내 #성장,DRAFT
-exp_jongno_003,해질녘 성곽길 25분,종로,pt_jongno_005,sg_jongno_002,하루를 마무리하며 풍경을 보고 싶을 때,SUNSET,CLEAR,30,MEDIUM,낙산공원 낮은 성곽길을 걸으며 야경을 기다리는 경험,어두워지기 전 돌아갈 길과 교통편을 확인하세요,#야경 #성곽 #산책,DRAFT
-exp_jongno_004,비 오는 날 짧은 문화 관람,종로,pt_jongno_004,,비 오는 날 실내에서 새로운 자극이 필요할 때,AFTERNOON,RAIN,45,LOW,의학박물관에서 짧은 관람으로 생각의 방향을 바꾸는 경험,운영 일정과 관람 가능 여부를 확인하세요,#비오는날 #문화 #실내,DRAFT
-exp_jongno_005,대학로 약속 전 벤치 휴식,종로,pt_jongno_007,sg_jongno_004,다음 일정 전 15분이 비었을 때,EVENING,ANY,15,LOW,마로니에공원에서 앉아 호흡을 고르고 사람 구경을 하는 경험,가방 등 소지품을 가까이 두세요,#공원 #짧은휴식 #대학로,DRAFT
-exp_jongno_006,고요한 동네 독서 시간,종로,pt_jongno_008,,사람이 적은 곳에서 책을 읽고 싶을 때,MORNING,ANY,60,LOW,청운문학도서관에서 차분히 책을 읽으며 오전을 여는 경험,좌석이 적을 수 있어 이른 시간 방문을 고려하세요,#독서 #고요한 #동네,DRAFT
+exp_gwanak_001,점심 후 낙성대 산책,관악,pt_gwanak_001,sg_gwanak_001,식사 후 걷고 싶을 때,AFTERNOON,CLEAR,25,LOW,공원을 천천히 걷는 경험,짧은 순환 동선을 정하세요,#산책 #낙성대,DRAFT
+exp_gwanak_002,비 오는 날 도서관 집중,관악,pt_gwanak_002,,비가 와도 집중하고 싶을 때,AFTERNOON,RAIN,60,LOW,도서관에서 읽고 작업하는 경험,운영 시간을 확인하세요,#독서 #신림,DRAFT
+exp_gwanak_003,청년 정보와 숨 고르기,관악,pt_gwanak_003,,생활 정보를 찾고 싶을 때,AFTERNOON,ANY,40,LOW,청년청에서 지원 정보를 확인하는 경험,프로그램을 확인하세요,#청년공간,DRAFT
+exp_gwanak_004,퇴근 후 가벼운 몸풀기,관악,pt_gwanak_004,sg_gwanak_004,몸을 움직이고 싶을 때,EVENING,ANY,45,MEDIUM,운동 후 공원까지 걸어 회복하는 경험,무리하지 마세요,#운동 #회복,DRAFT
+exp_gwanak_005,공연 전 문화 산책,관악,pt_gwanak_005,sg_gwanak_003,공연 전 시간이 있을 때,EVENING,ANY,20,LOW,아트홀 주변을 짧게 걷는 경험,입장 시간을 확인하세요,#문화 #신림,DRAFT
+exp_gwanak_006,약속 전 낙성대 15분,관악,pt_gwanak_007,sg_gwanak_002,다음 약속 전 시간이 비었을 때,EVENING,ANY,15,LOW,역에서 공원 방향으로 걷는 경험,돌아올 시간을 정하세요,#짧은산책,DRAFT
