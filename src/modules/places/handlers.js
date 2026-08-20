@@ -14,7 +14,9 @@ function serializePlaceCard(place) {
   return {
     id: place.id,
     name: place.name,
-    category: place.activityType,
+    category: place.primaryCategory ?? place.activityType,
+    primaryCategory: place.primaryCategory ?? place.activityType,
+    geometryType: place.geometryType ?? 'POINT',
     address: place.address,
     imageUrl: place.imageUrls?.[0] ?? null,
     durationMinutes: place.durationMinutes
@@ -39,10 +41,24 @@ function serializePlaceDetail(place, store, viewer) {
   return {
     id: place.id,
     name: place.name,
-    category: place.activityType,
+    category: place.primaryCategory ?? place.activityType,
+    primaryCategory: place.primaryCategory ?? place.activityType,
     address: place.address,
-    location: { latitude: place.latitude, longitude: place.longitude },
+    geometryType: place.geometryType ?? 'POINT',
+    point: pointFor(place),
+    startPoint: place.geometryType === 'SEGMENT' ? point(place.startLatitude, place.startLongitude) : null,
+    endPoint: place.geometryType === 'SEGMENT' ? point(place.endLatitude, place.endLongitude) : null,
+    encodedPolyline: place.encodedPolyline ?? null,
+    location: pointFor(place),
     durationMinutes: place.durationMinutes,
+    experienceCategories: place.experienceCategories ?? [],
+    intensity: place.intensity ?? null,
+    indoorOutdoor: place.indoorOutdoor ?? null,
+    recommendedTimeBands: place.recommendedTimeBands ?? [],
+    soloFriendly: place.soloFriendly ?? null,
+    priceLevel: place.priceLevel ?? null,
+    tags: place.tags ?? [],
+    status: place.status ?? 'ACTIVE',
     imageUrls: place.imageUrls ?? [],
     description: place.description,
     tip: place.tip,
@@ -100,9 +116,14 @@ export async function getMapPlaces(context) {
       places: places.map((p) => ({
         id: p.id,
         name: p.name,
+        geometryType: p.geometryType ?? 'POINT',
+        point: pointFor(p),
+        startPoint: p.geometryType === 'SEGMENT' ? point(p.startLatitude, p.startLongitude) : null,
+        endPoint: p.geometryType === 'SEGMENT' ? point(p.endLatitude, p.endLongitude) : null,
+        encodedPolyline: p.encodedPolyline ?? null,
         latitude: p.latitude,
         longitude: p.longitude,
-        category: p.activityType
+        category: p.primaryCategory ?? p.activityType
       }))
     }
   };
@@ -115,7 +136,7 @@ export async function searchPlaces(context) {
   let places = context.store.listPlaces({ keyword });
   if (lat != null && lng != null) {
     places = places
-      .map((p) => ({ p, d: distance(lat, lng, p.latitude, p.longitude) }))
+      .map((p) => ({ p, d: distance(lat, lng, p.pointLatitude ?? p.startLatitude ?? p.latitude, p.pointLongitude ?? p.startLongitude ?? p.longitude) }))
       .sort((a, b) => a.d - b.d)
       .map((x) => x.p);
   }
@@ -154,7 +175,7 @@ export async function getRealtimeRecommendations(context) {
   let places = context.store.listPlaces({});
   if (lat != null && lng != null) {
     places = places
-      .map((p) => ({ p, d: distance(lat, lng, p.latitude, p.longitude) }))
+      .map((p) => ({ p, d: distance(lat, lng, p.pointLatitude ?? p.startLatitude ?? p.latitude, p.pointLongitude ?? p.startLongitude ?? p.longitude) }))
       .sort((a, b) => a.d - b.d)
       .map((x) => x.p);
   }
@@ -188,10 +209,11 @@ function validateCreatePlace(body, { partial = false } = {}) {
   const need = (f) => !partial || body[f] !== undefined;
   if (need('name')) out.name = assertRequiredString(body.name, 'name', { min: 1, max: 100 });
   if (need('address')) out.address = assertRequiredString(body.address, 'address', { min: 1, max: 255 });
-  if (need('activityType')) {
-    const t = String(body.activityType ?? '').toUpperCase();
+  if (need('activityType') || body.primaryCategory !== undefined) {
+    const t = String(body.primaryCategory ?? body.activityType ?? '').toUpperCase();
     if (!ACTIVITY_TYPES.has(t)) throw new ApiError(422, 'VALIDATION_ERROR', 'activityType이 올바르지 않습니다.');
     out.activityType = t;
+    out.primaryCategory = t;
   }
   if (need('description')) out.description = assertRequiredString(body.description, 'description', { min: 1, max: 1000 });
   if (body.durationMinutes !== undefined) {
@@ -206,7 +228,71 @@ function validateCreatePlace(body, { partial = false } = {}) {
     if (!Array.isArray(body.imageUrls)) throw new ApiError(422, 'VALIDATION_ERROR', 'imageUrls는 배열이어야 합니다.');
     out.imageUrls = body.imageUrls.map((u) => assertRequiredString(u, 'imageUrls[]', { min: 1, max: 2048 }));
   }
+  if (body.geometryType !== undefined || !partial) {
+    const geometryType = String(body.geometryType ?? (body.startPoint || body.endPoint ? 'SEGMENT' : 'POINT')).toUpperCase();
+    if (!['POINT', 'SEGMENT'].includes(geometryType)) throw new ApiError(422, 'VALIDATION_ERROR', 'geometryType은 POINT 또는 SEGMENT여야 합니다.');
+    out.geometryType = geometryType;
+    if (geometryType === 'POINT') {
+      const pointInput = body.point ?? (body.latitude !== undefined || body.longitude !== undefined
+        ? { latitude: body.latitude, longitude: body.longitude }
+        : null);
+      if (!partial && !validPoint(pointInput)) throw new ApiError(422, 'VALIDATION_ERROR', 'POINT 장소는 point 좌표가 필요합니다.');
+      if (pointInput) {
+        const normalized = normalizePoint(pointInput);
+        out.latitude = normalized.latitude;
+        out.longitude = normalized.longitude;
+        out.pointLatitude = normalized.latitude;
+        out.pointLongitude = normalized.longitude;
+      }
+    } else {
+      if (!partial && (!validPoint(body.startPoint) || !validPoint(body.endPoint))) {
+        throw new ApiError(422, 'VALIDATION_ERROR', 'SEGMENT 장소는 startPoint와 endPoint가 필요합니다.');
+      }
+      if (body.startPoint) {
+        const start = normalizePoint(body.startPoint);
+        out.startLatitude = start.latitude;
+        out.startLongitude = start.longitude;
+      }
+      if (body.endPoint) {
+        const end = normalizePoint(body.endPoint);
+        out.endLatitude = end.latitude;
+        out.endLongitude = end.longitude;
+      }
+      if (body.encodedPolyline !== undefined) out.encodedPolyline = body.encodedPolyline;
+    }
+  }
+  if (body.experienceCategories !== undefined) out.experienceCategories = stringArray(body.experienceCategories, 'experienceCategories');
+  if (body.recommendedTimeBands !== undefined) out.recommendedTimeBands = stringArray(body.recommendedTimeBands, 'recommendedTimeBands');
+  if (body.tags !== undefined) out.tags = stringArray(body.tags, 'tags');
+  if (body.intensity !== undefined) out.intensity = body.intensity;
+  if (body.indoorOutdoor !== undefined) out.indoorOutdoor = body.indoorOutdoor;
+  if (body.soloFriendly !== undefined) out.soloFriendly = Boolean(body.soloFriendly);
+  if (body.priceLevel !== undefined) out.priceLevel = body.priceLevel;
+  if (body.status !== undefined) out.status = body.status;
   return out;
+}
+
+function point(latitude, longitude) {
+  if (latitude == null || longitude == null) return null;
+  return { latitude: Number(latitude), longitude: Number(longitude) };
+}
+
+function pointFor(place) {
+  return point(place.pointLatitude ?? place.latitude, place.pointLongitude ?? place.longitude);
+}
+
+function validPoint(value) {
+  return value && Number.isFinite(Number(value.latitude)) && Number.isFinite(Number(value.longitude));
+}
+
+function normalizePoint(value) {
+  if (!validPoint(value)) throw new ApiError(422, 'VALIDATION_ERROR', '좌표가 올바르지 않습니다.');
+  return point(value.latitude, value.longitude);
+}
+
+function stringArray(value, field) {
+  if (!Array.isArray(value)) throw new ApiError(422, 'VALIDATION_ERROR', `${field}는 배열이어야 합니다.`);
+  return value.map((item) => assertRequiredString(item, `${field}[]`, { min: 1, max: 100 }));
 }
 
 function distance(lat1, lng1, lat2, lng2) {

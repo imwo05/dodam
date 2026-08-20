@@ -1,347 +1,419 @@
 import { ApiError } from '../../lib/errors.js';
 import { requireAuth } from '../auth/service.js';
+import { buildPlanBContext, contextFromSession } from './context-builder.js';
+import { maxStopsFor, retrieveCandidates } from './candidate-retriever.js';
+import { createDistanceProvider } from './distance-provider.js';
+import { createRouteProvider, placeLocation } from './route-provider.js';
 
 const CONDITIONS = new Set(['VERY_GOOD', 'GOOD', 'NORMAL', 'TIRED', 'VERY_TIRED']);
 const MODES = new Set(['SIMILAR', 'EASY', 'MINIMUM', 'AUTO']);
 const CATEGORIES = new Set(['EXERCISE', 'DIET', 'WALK', 'RUNNING', 'MENTAL_HEALTH', 'CUSTOM']);
-const LOW_INTENSITY = new Set(['WALK', 'MENTAL_HEALTH', 'DIET']);
-const DEFAULT_TRAVEL = 5;
+const PROMPT_VERSION = 'plan-b-v1';
+const routeProvider = createRouteProvider();
+const distanceProvider = createDistanceProvider();
 
-// ============ 추천 생성 ============
 export async function createRecommendations(context) {
   const user = requireAuth(context);
   const input = validateRecoRequest(context.body);
-  const availableMinutes = timeDiffMinutes(input.startTime, input.endTime);
-  if (availableMinutes <= 0) {
-    throw new ApiError(422, 'VALIDATION_ERROR', 'endTime은 startTime보다 늦어야 합니다.');
-  }
+  const planContext = buildPlanBContext({ store: context.store, user, input });
+  const candidates = retrieveCandidates({ store: context.store, planContext, routeProvider, distanceProvider });
+  if (!candidates.length) throw noCandidateError();
 
-  const ranked = await rankPlaces(context, input, availableMinutes, []);
   const session = context.store.createPlanBSession({
     userId: user.id,
     date: input.date,
+    brokenScheduleId: planContext.brokenPlan?.scheduleId ?? null,
+    nextScheduleId: planContext.nextFixedSchedule?.scheduleId ?? null,
     startTime: input.startTime,
-    endTime: input.endTime,
-    availableMinutes,
-    selfCareCategory: input.selfCareCategory,
+    endTime: planContext.effectiveEndTime,
+    availableMinutes: planContext.availableWindow.availableMinutes,
+    bufferMinutes: planContext.availableWindow.bufferMinutes,
+    usableMinutes: planContext.availableWindow.usableMinutes,
+    selfCareCategory: planContext.selfCareCategory,
     customCategory: input.customCategory,
     condition: input.condition,
     continuityMode: input.continuityMode,
     location: input.location,
-    summary: ranked.summary,
-    recommendedPlaces: ranked.items.map((r) => ({ placeId: r.place.id, score: r.score, reason: r.reason }))
+    originalGoal: planContext.originalGoal,
+    aiStyle: planContext.aiStyle,
+    promptVersion: PROMPT_VERSION,
+    contextSnapshot: planContext
   });
 
-  return {
-    status: 201,
-    data: {
-      sessionId: session.id,
-      availableMinutes,
-      summary: ranked.summary,
-      recommendedPlaces: ranked.items,
-      suggestedCourse: []
-    }
-  };
+  const generated = await generateCourse(context, session, planContext, candidates);
+  persistGeneratedPlan(context.store, session.id, generated);
+  return { status: 201, data: buildPlanBResponse(context.store.findPlanBSession(session.id), context.store) };
 }
 
 export async function getSession(context) {
   const { session } = findOwnedSession(context);
-  return {
-    data: {
-      id: session.id,
-      status: session.status,
-      currentStopOrder: session.currentStopOrder,
-      stops: session.stops.map((s) => serializeStop(s, context.store))
-    }
-  };
+  return { data: {
+    ...buildPlanBResponse(session, context.store),
+    id: session.id,
+    currentStopOrder: session.currentStopOrder
+  } };
 }
 
 export async function regenerate(context) {
   const { session } = findOwnedSession(context);
-  const exclude = Array.isArray(context.body.excludePlaceIds) ? context.body.excludePlaceIds.map(String) : [];
-  const input = {
-    date: session.date,
-    startTime: session.startTime,
-    endTime: session.endTime,
-    selfCareCategory: session.selfCareCategory,
-    customCategory: session.customCategory,
-    condition: session.condition,
-    continuityMode: session.continuityMode,
-    location: { latitude: session.latitude, longitude: session.longitude }
-  };
-  const ranked = await rankPlaces(context, input, session.availableMinutes, exclude);
-  context.store.updatePlanBSession(session.id, {
-    summary: ranked.summary,
-    recommendedPlaces: ranked.items.map((r) => ({ placeId: r.place.id, score: r.score, reason: r.reason }))
+  assertSessionStatus(session, 'RECOMMENDED');
+  const exclude = Array.isArray(context.body.excludePlaceIds)
+    ? context.body.excludePlaceIds.map(String)
+    : [];
+  const planContext = contextFromSession(session);
+  const candidates = retrieveCandidates({
+    store: context.store,
+    planContext,
+    routeProvider,
+    distanceProvider,
+    excludePlaceIds: exclude
   });
-  return {
-    data: {
-      sessionId: session.id,
-      availableMinutes: session.availableMinutes,
-      summary: ranked.summary,
-      recommendedPlaces: ranked.items,
-      suggestedCourse: []
-    }
-  };
+  if (!candidates.length) throw noCandidateError();
+
+  const generated = await generateCourse(context, session, planContext, candidates);
+  persistGeneratedPlan(context.store, session.id, generated);
+  return { data: buildPlanBResponse(context.store.findPlanBSession(session.id), context.store) };
 }
 
-// ============ 코스 ============
 export async function getCourse(context) {
   const { session } = findOwnedSession(context);
-  let stops = session.stops;
-  // 코스가 비어있으면 추천 상위 2개로 초기화
-  if (stops.length === 0 && session.recommendedPlaces.length) {
-    stops = session.recommendedPlaces.slice(0, 2).map((r, i) => ({
-      id: context.store.nextStopId(),
-      order: i + 1,
-      placeId: r.placeId,
-      travelMinutes: DEFAULT_TRAVEL,
-      durationMinutes: context.store.findPlaceById(r.placeId)?.durationMinutes ?? 30,
-      status: 'NOT_STARTED'
-    }));
-    recompute(stops, session, context.store);
-    context.store.updatePlanBSession(session.id, { stops });
-  }
-  return { data: buildCourseResponse(session, stops, context.store) };
+  return { data: buildCourseResponse(session, context.store) };
 }
 
 export async function addStop(context) {
-  const { session, raw } = findOwnedSession(context);
+  const { session } = findOwnedSession(context);
+  assertSessionStatus(session, 'RECOMMENDED');
   const placeId = String(context.body.placeId ?? '');
   const place = context.store.findPlaceById(placeId);
-  if (!place) throw new ApiError(404, 'PLACE_NOT_FOUND', '장소를 찾을 수 없습니다.');
+  if (!place || (place.status ?? 'ACTIVE') !== 'ACTIVE') {
+    throw new ApiError(404, 'PLACE_NOT_FOUND', '장소를 찾을 수 없습니다.');
+  }
 
-  const stops = [...session.stops];
-  stops.push({
-    id: context.store.nextStopId(),
-    order: stops.length + 1,
-    placeId,
-    travelMinutes: DEFAULT_TRAVEL,
-    durationMinutes: place.durationMinutes ?? 30,
-    status: 'NOT_STARTED'
-  });
-  recompute(stops, session, context.store);
-  context.store.updatePlanBSession(session.id, { stops });
-  return { data: buildCourseResponse(session, stops, context.store) };
+  const insertAfterStopId = context.body.insertAfterStopId == null
+    ? null
+    : String(context.body.insertAfterStopId);
+  const stops = cloneStops(session.stops);
+  const newStop = newStopRecord(context.store.nextStopId(), session.id, placeId, place);
+  if (insertAfterStopId == null) {
+    stops.push(newStop);
+  } else {
+    const index = stops.findIndex((stop) => stop.id === insertAfterStopId);
+    if (index < 0) throw new ApiError(422, 'INVALID_COURSE_ORDER', 'insertAfterStopId가 현재 코스에 없습니다.');
+    stops.splice(index + 1, 0, newStop);
+  }
+
+  const recalculated = calculateCourse(session, stops, context.store);
+  persistCourse(context.store, session.id, recalculated);
+  return { data: buildCourseResponse(context.store.findPlanBSession(session.id), context.store) };
 }
 
 export async function removeStop(context) {
   const { session } = findOwnedSession(context);
+  assertSessionStatus(session, 'RECOMMENDED');
   const stopId = context.params.stopId;
-  const stops = session.stops.filter((s) => s.id !== stopId);
+  const stops = cloneStops(session.stops).filter((stop) => stop.id !== stopId);
   if (stops.length === session.stops.length) {
     throw new ApiError(404, 'STOP_NOT_FOUND', '해당 코스 장소를 찾을 수 없습니다.');
   }
-  stops.forEach((s, i) => (s.order = i + 1));
-  recompute(stops, session, context.store);
-  context.store.updatePlanBSession(session.id, { stops });
-  return { data: buildCourseResponse(session, stops, context.store) };
+  if (stops.length < 1) {
+    throw new ApiError(409, 'MINIMUM_ONE_STOP', 'Plan B 코스에는 최소 한 곳이 필요합니다.');
+  }
+  const recalculated = calculateCourse(session, stops, context.store);
+  persistCourse(context.store, session.id, recalculated);
+  return { data: buildCourseResponse(context.store.findPlanBSession(session.id), context.store) };
 }
 
 export async function reorderStops(context) {
   const { session } = findOwnedSession(context);
+  assertSessionStatus(session, 'RECOMMENDED');
   const stopIds = context.body.stopIds;
   if (!Array.isArray(stopIds) || stopIds.length !== session.stops.length) {
-    throw new ApiError(422, 'VALIDATION_ERROR', 'stopIds는 현재 코스의 모든 stop을 포함해야 합니다.');
+    throw new ApiError(422, 'INVALID_COURSE_ORDER', 'stopIds는 현재 코스의 모든 stop을 포함해야 합니다.');
   }
-  const byId = new Map(session.stops.map((s) => [s.id, s]));
-  const stops = stopIds.map((id) => byId.get(id));
-  if (stops.some((s) => !s)) throw new ApiError(422, 'VALIDATION_ERROR', 'stopIds에 잘못된 값이 있습니다.');
-  stops.forEach((s, i) => (s.order = i + 1));
-  recompute(stops, session, context.store);
-  context.store.updatePlanBSession(session.id, { stops });
-  return { data: buildCourseResponse(session, stops, context.store) };
+  const byId = new Map(session.stops.map((stop) => [stop.id, stop]));
+  if (new Set(stopIds).size !== stopIds.length || stopIds.some((id) => !byId.has(id))) {
+    throw new ApiError(422, 'INVALID_COURSE_ORDER', 'stopIds에 잘못된 값이 있습니다.');
+  }
+  const recalculated = calculateCourse(session, stopIds.map((id) => ({ ...byId.get(id) })), context.store);
+  persistCourse(context.store, session.id, recalculated);
+  return { data: buildCourseResponse(context.store.findPlanBSession(session.id), context.store) };
 }
 
-// ============ 진행 ============
 export async function startSession(context) {
   const { session } = findOwnedSession(context);
-  if (session.stops.length === 0) throw new ApiError(409, 'EMPTY_COURSE', '코스에 장소가 없습니다.');
-  const stops = session.stops.map((s, i) => ({ ...s, status: i === 0 ? 'NOT_STARTED' : s.status }));
+  if (session.status === 'IN_PROGRESS') throw new ApiError(409, 'PLAN_B_ALREADY_STARTED', 'Plan B가 이미 시작되었습니다.');
+  if (session.status === 'COMPLETED') throw new ApiError(409, 'PLAN_B_ALREADY_COMPLETED', '완료된 Plan B입니다.');
+  if (session.status !== 'RECOMMENDED') throw new ApiError(409, 'INVALID_STATUS_TRANSITION', 'Plan B를 시작할 수 없습니다.');
+  if (!session.stops.length) throw new ApiError(409, 'EMPTY_COURSE', '코스에 장소가 없습니다.');
+  const stops = session.stops.map((stop) => ({ ...stop }));
   context.store.updatePlanBSession(session.id, { status: 'IN_PROGRESS', currentStopOrder: 1, stops });
-  return {
-    data: { status: 'IN_PROGRESS', currentStop: { id: stops[0].id, order: stops[0].order } }
-  };
+  return { data: { status: 'IN_PROGRESS', currentStop: { id: stops[0].id, order: stops[0].order } } };
 }
 
 export async function startStop(context) {
   const { session } = findOwnedSession(context);
-  const stops = session.stops.map((s) =>
-    s.id === context.params.stopId ? { ...s, status: 'IN_PROGRESS' } : s
-  );
-  if (!stops.some((s) => s.id === context.params.stopId)) {
-    throw new ApiError(404, 'STOP_NOT_FOUND', '장소를 찾을 수 없습니다.');
-  }
-  const cur = stops.find((s) => s.id === context.params.stopId);
-  context.store.updatePlanBSession(session.id, { stops, currentStopOrder: cur.order });
-  return { data: { stopId: cur.id, status: 'IN_PROGRESS' } };
+  assertSessionStatus(session, 'IN_PROGRESS');
+  const target = findStop(session, context.params.stopId);
+  if (target.status !== 'NOT_STARTED') throw new ApiError(409, 'INVALID_STATUS_TRANSITION', 'stop을 시작할 수 없습니다.');
+  const startedAt = new Date().toISOString();
+  const stops = session.stops.map((stop) => stop.id === target.id
+    ? { ...stop, status: 'IN_PROGRESS', startedAt }
+    : { ...stop });
+  context.store.updatePlanBSession(session.id, { stops, currentStopOrder: target.order });
+  return { data: { stopId: target.id, status: 'IN_PROGRESS' } };
 }
 
 export async function completeStop(context) {
   const user = requireAuth(context);
   const { session } = findOwnedSession(context, user);
-  const target = session.stops.find((s) => s.id === context.params.stopId);
-  if (!target) throw new ApiError(404, 'STOP_NOT_FOUND', '장소를 찾을 수 없습니다.');
+  const target = findStop(session, context.params.stopId);
+  if (target.status === 'COMPLETED') throw new ApiError(409, 'STOP_ALREADY_COMPLETED', '이미 완료된 stop입니다.');
+  assertSessionStatus(session, 'IN_PROGRESS');
+  if (target.status !== 'IN_PROGRESS') throw new ApiError(409, 'INVALID_STATUS_TRANSITION', '시작된 stop만 완료할 수 있습니다.');
 
-  const stops = session.stops.map((s) => (s.id === target.id ? { ...s, status: 'COMPLETED' } : s));
-  const next = stops.find((s) => s.order === target.order + 1);
+  const completedAt = new Date().toISOString();
+  const stops = session.stops.map((stop) => stop.id === target.id
+    ? { ...stop, status: 'COMPLETED', completedAt }
+    : { ...stop });
+  if (!context.store.findActivityByPlanBStop(user.id, target.id)) {
+    const place = context.store.findPlaceById(target.placeId);
+    context.store.createActivity({
+      userId: user.id,
+      date: session.date,
+      category: place?.primaryCategory ?? place?.activityType ?? null,
+      placeId: target.placeId,
+      durationMinutes: target.durationMinutes,
+      source: 'PLAN_B',
+      planBSessionId: session.id,
+      planBStopId: target.id
+    });
+  }
+  return finishStop(context.store, session, stops, target.id, 'complete');
+}
 
-  // 활동 기록 생성 (정원 레벨업 재료)
-  const place = context.store.findPlaceById(target.placeId);
-  context.store.createActivity({
-    userId: user.id,
-    date: session.date,
-    category: place?.activityType ?? null,
-    placeId: target.placeId,
-    durationMinutes: target.durationMinutes,
-    source: 'PLAN_B'
+export async function skipStop(context) {
+  const { session } = findOwnedSession(context);
+  assertSessionStatus(session, 'IN_PROGRESS');
+  const target = findStop(session, context.params.stopId);
+  if (!['NOT_STARTED', 'IN_PROGRESS'].includes(target.status)) {
+    throw new ApiError(409, 'INVALID_STATUS_TRANSITION', 'stop을 건너뛸 수 없습니다.');
+  }
+  const stops = session.stops.map((stop) => stop.id === target.id
+    ? { ...stop, status: 'SKIPPED', skippedAt: new Date().toISOString() }
+    : { ...stop });
+  return finishStop(context.store, session, stops, target.id, 'skip');
+}
+
+export async function cancelSession(context) {
+  const { session } = findOwnedSession(context);
+  if (!['RECOMMENDED', 'IN_PROGRESS'].includes(session.status)) {
+    throw new ApiError(409, 'INVALID_STATUS_TRANSITION', 'Plan B를 취소할 수 없습니다.');
+  }
+  const updated = context.store.updatePlanBSession(session.id, { status: 'CANCELLED' });
+  return { data: { sessionId: updated.id, status: updated.status } };
+}
+
+async function generateCourse(context, session, planContext, candidates) {
+  const aiResult = await requestAiPlan(context, planContext, candidates);
+  const allowedIds = new Set(candidates.map((candidate) => candidate.id));
+  const selectedIds = uniqueStrings(aiResult?.selectedExperienceIds)
+    .filter((id) => allowedIds.has(id))
+    .slice(0, maxStopsFor(planContext.availableWindow.availableMinutes));
+  const chosen = chooseValidCourse(session, candidates, selectedIds, context.store);
+  if (!chosen) throw noCandidateError();
+
+  const reasonMap = new Map(
+    (Array.isArray(aiResult?.stopReasons) ? aiResult.stopReasons : [])
+      .filter((item) => allowedIds.has(String(item?.placeId)))
+      .map((item) => [String(item.placeId), String(item.reason ?? '')])
+  );
+  return {
+    ...chosen,
+    reframedGoal: sanitizeReframedGoal(aiResult?.reframedGoal, planContext.originalGoal, planContext),
+    courseConcept: nonEmpty(aiResult?.courseConcept) ?? fallbackConcept(planContext),
+    summary: nonEmpty(aiResult?.summary) ?? fallbackSummary(planContext),
+    damiState: normalizeDamiState(aiResult?.damiState, planContext.selfCareCategory),
+    promptVersion: PROMPT_VERSION,
+    reasonMap
+  };
+}
+
+async function requestAiPlan(context, planContext, candidates) {
+  try {
+    if (context.aiClient?.planBPlan) {
+      return await context.aiClient.planBPlan({
+        context: toAiContext(planContext),
+        candidates: candidates.map(toAiCandidate),
+        promptVersion: PROMPT_VERSION
+      });
+    }
+  } catch {
+    // Backend candidate ranking fallback.
+  }
+  return null;
+}
+
+function chooseValidCourse(session, candidates, selectedIds, store) {
+  const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+  const selected = selectedIds.map((id) => byId.get(id)).filter(Boolean);
+  for (let count = selected.length; count >= 1; count -= 1) {
+    const result = tryCalculate(session, selected.slice(0, count), store);
+    if (result) return result;
+  }
+
+  for (const candidate of candidates) {
+    if (selectedIds.includes(candidate.id)) continue;
+    const result = tryCalculate(session, [candidate], store);
+    if (result) return result;
+  }
+
+  const maxStops = maxStopsFor(session.availableMinutes);
+  const fallback = candidates.slice(0, maxStops);
+  for (let count = fallback.length; count >= 1; count -= 1) {
+    const result = tryCalculate(session, fallback.slice(0, count), store);
+    if (result) return result;
+  }
+  return null;
+}
+
+function tryCalculate(session, candidates, store) {
+  const stops = candidates.map((candidate) => newStopRecord(
+    store.nextStopId(), session.id, candidate.id, candidate.place
+  ));
+  try {
+    return calculateCourse(session, stops, store);
+  } catch (error) {
+    if (error instanceof ApiError && error.code === 'COURSE_TIME_EXCEEDED') return null;
+    throw error;
+  }
+}
+
+function calculateCourse(session, stops, store) {
+  const currentLocation = session.latitude == null
+    ? null
+    : { latitude: session.latitude, longitude: session.longitude };
+  let cursor = toMinutes(session.startTime);
+  let previousLocation = currentLocation;
+  const recalculated = stops.map((stop, index) => {
+    const place = store.findPlaceById(stop.placeId);
+    const location = placeLocation(place);
+    const travelMinutes = routeProvider.getTravelTime(previousLocation, location);
+    const durationMinutes = Number(stop.durationMinutes ?? place?.durationMinutes ?? 30);
+    cursor += travelMinutes;
+    const startTime = toHHMM(cursor);
+    cursor += durationMinutes;
+    const endTime = toHHMM(cursor);
+    previousLocation = location;
+    return {
+      ...stop,
+      sessionId: session.id,
+      order: index + 1,
+      travelMinutes,
+      durationMinutes,
+      startTime,
+      endTime
+    };
   });
 
-  const allDone = stops.every((s) => s.status === 'COMPLETED');
-  context.store.updatePlanBSession(session.id, {
-    stops,
-    status: allDone ? 'COMPLETED' : 'IN_PROGRESS',
-    currentStopOrder: next ? next.order : target.order
-  });
+  const totalMinutes = recalculated.reduce(
+    (sum, stop) => sum + stop.travelMinutes + stop.durationMinutes, 0
+  );
+  const requiredMinutes = totalMinutes;
+  const usableMinutes = Number(session.usableMinutes ?? Math.max(0, session.availableMinutes - session.bufferMinutes));
+  if (requiredMinutes > usableMinutes) {
+    throw new ApiError(
+      409,
+      'COURSE_TIME_EXCEEDED',
+      '이 코스는 buffer 시간을 고려하면 시간이 부족합니다.',
+      { requiredMinutes, availableMinutes: session.availableMinutes }
+    );
+  }
 
   return {
+    stops: recalculated,
+    totalMinutes,
+    finalTravel: null
+  };
+}
+
+function persistGeneratedPlan(store, sessionId, generated) {
+  const session = store.findPlanBSession(sessionId);
+  const stops = generated.stops.map((stop) => ({
+    ...stop,
+    reason: generated.reasonMap.get(stop.placeId) || fallbackStopReason(store.findPlaceById(stop.placeId), session),
+    miniMission: null,
+    status: stop.status ?? 'NOT_STARTED',
+    startedAt: stop.startedAt ?? null,
+    completedAt: stop.completedAt ?? null,
+    skippedAt: stop.skippedAt ?? null
+  }));
+  store.updatePlanBSession(sessionId, {
+    stops,
+    finalTravel: generated.finalTravel,
+    reframedGoal: generated.reframedGoal,
+    originalGoal: generated.reframedGoal.originalGoal,
+    reframingReason: generated.reframedGoal.reason,
+    courseConcept: generated.courseConcept,
+    summary: generated.summary,
+    damiState: generated.damiState,
+    promptVersion: generated.promptVersion,
+    status: 'RECOMMENDED',
+    currentStopOrder: stops[0]?.order ?? null
+  });
+}
+
+function persistCourse(store, sessionId, course) {
+  store.updatePlanBSession(sessionId, {
+    stops: course.stops,
+    finalTravel: course.finalTravel,
+    currentStopOrder: course.stops[0]?.order ?? null
+  });
+}
+
+function finishStop(store, session, stops, stopId, action) {
+  const next = stops
+    .filter((stop) => ['NOT_STARTED', 'IN_PROGRESS'].includes(stop.status))
+    .sort((a, b) => a.order - b.order)[0] ?? null;
+  const allTerminal = stops.every((stop) => ['COMPLETED', 'SKIPPED'].includes(stop.status));
+  const updated = store.updatePlanBSession(session.id, {
+    stops,
+    status: allTerminal ? 'COMPLETED' : 'IN_PROGRESS',
+    currentStopOrder: next?.order ?? null
+  });
+  return {
     data: {
-      completedStop: target.id,
+      ...(action === 'skip' ? { skippedStopId: stopId } : { completedStopId: stopId }),
       hasNextStop: Boolean(next),
-      nextStop: next ? { id: next.id, order: next.order, placeId: next.placeId } : null
+      nextStop: next ? { id: next.id, placeId: next.placeId } : null,
+      sessionStatus: updated.status
     }
   };
 }
 
-// ============ 랭킹 로직 ============
-async function rankPlaces(context, input, availableMinutes, excludeIds) {
-  const store = context.store;
-  const exclude = new Set(excludeIds.map(String));
-  let candidates = store.listPlaces({});
-
-  // 카테고리 필터 (CUSTOM/미지정이면 전체)
-  if (input.selfCareCategory && input.selfCareCategory !== 'CUSTOM') {
-    const matched = candidates.filter((p) => p.activityType === input.selfCareCategory);
-    if (matched.length) candidates = matched;
-  }
-  // 소요시간 필터 + 제외
-  candidates = candidates.filter(
-    (p) => !exclude.has(p.id) && (p.durationMinutes == null || p.durationMinutes <= availableMinutes)
-  );
-
-  const scored = candidates
-    .map((place) => ({ place, score: scorePlace(place, input, availableMinutes) }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
-
-  // 이유 생성 (AI → 폴백)
-  const reasonPayload = {
-    situation: {
-      condition: input.condition,
-      continuityMode: input.continuityMode,
-      availableMinutes
-    },
-    places: scored.map((s) => ({
-      placeId: s.place.id,
-      name: s.place.name,
-      category: s.place.activityType,
-      durationMinutes: s.place.durationMinutes
-    }))
-  };
-  let ai = null;
-  try {
-    ai = await context.aiClient?.planBReasons(reasonPayload);
-  } catch {
-    ai = null;
-  }
-  const reasonMap = new Map((ai?.reasons ?? []).map((r) => [r.placeId, r.reason]));
-  const summary =
-    ai?.summary ??
-    (isTired(input.condition)
-      ? '현재 컨디션과 남은 시간을 고려해 부담 없이 이어갈 수 있는 장소를 골랐어요.'
-      : '남은 시간 안에 기분 좋게 다녀올 수 있는 장소를 골랐어요.');
-
-  const items = scored.map((s) => ({
-    place: serializePlace(s.place),
-    score: Math.round(s.score * 100) / 100,
-    reason: reasonMap.get(s.place.id) ?? fallbackReason(s.place, input)
-  }));
-  return { summary, items };
-}
-
-function scorePlace(place, input, availableMinutes) {
-  let score = 0.5;
-  // 카테고리 매칭
-  if (input.selfCareCategory && place.activityType === input.selfCareCategory) score += 0.2;
-  // 소요시간 적합 (남은 시간 대비 알맞을수록 +)
-  if (place.durationMinutes != null) {
-    const fit = place.durationMinutes / availableMinutes;
-    if (fit <= 0.6) score += 0.15;
-    else if (fit <= 1) score += 0.05;
-  }
-  // 컨디션: 피곤하면 저강도 선호
-  if (isTired(input.condition)) {
-    if (LOW_INTENSITY.has(place.activityType)) score += 0.15;
-  } else if (input.condition === 'VERY_GOOD' || input.condition === 'GOOD') {
-    if (place.activityType === 'RUNNING' || place.activityType === 'EXERCISE') score += 0.1;
-  }
-  // 계획 유지 수준
-  if (input.continuityMode === 'MINIMUM' && place.durationMinutes != null && place.durationMinutes <= 25) score += 0.1;
-  if (input.continuityMode === 'EASY' && LOW_INTENSITY.has(place.activityType)) score += 0.1;
-  // 근접성
-  if (input.location?.latitude != null && place.latitude != null) {
-    const d = Math.hypot(input.location.latitude - place.latitude, input.location.longitude - place.longitude);
-    score += Math.max(0, 0.1 - d); // 가까울수록 최대 +0.1
-  }
-  return Math.max(0, Math.min(1, score));
-}
-
-// ============ helpers ============
-function validateRecoRequest(body) {
-  const out = {};
-  out.date = assertDate(body.date);
-  out.startTime = assertTime(body.startTime, 'startTime');
-  out.endTime = assertTime(body.endTime, 'endTime');
-  out.selfCareCategory = body.selfCareCategory == null ? null : assertEnum(body.selfCareCategory, CATEGORIES, 'selfCareCategory');
-  out.customCategory = body.customCategory ?? null;
-  out.condition = body.condition == null ? null : assertEnum(body.condition, CONDITIONS, 'condition');
-  out.continuityMode = body.continuityMode == null ? null : assertEnum(body.continuityMode, MODES, 'continuityMode');
-  const loc = body.location ?? {};
-  out.location = {
-    latitude: loc.latitude != null ? Number(loc.latitude) : null,
-    longitude: loc.longitude != null ? Number(loc.longitude) : null
-  };
-  return out;
-}
-
-function findOwnedSession(context, userArg) {
-  const user = userArg ?? requireAuth(context);
-  const session = context.store.findPlanBSession(context.params.sessionId);
-  if (!session) throw new ApiError(404, 'SESSION_NOT_FOUND', 'Plan B 세션을 찾을 수 없습니다.');
-  if (session.userId !== user.id) throw new ApiError(403, 'FORBIDDEN', '본인 세션만 접근할 수 있습니다.');
-  return { session, raw: session, user };
-}
-
-function recompute(stops, session, store) {
-  let cursor = toMin(session.startTime);
-  for (const stop of stops) {
-    const place = store.findPlaceById(stop.placeId);
-    stop.durationMinutes = stop.durationMinutes ?? place?.durationMinutes ?? 30;
-    stop.travelMinutes = stop.travelMinutes ?? DEFAULT_TRAVEL;
-    cursor += stop.travelMinutes;
-    stop.startTime = toHHMM(cursor);
-    cursor += stop.durationMinutes;
-    stop.endTime = toHHMM(cursor);
-  }
-}
-
-function buildCourseResponse(session, stops, store) {
-  const totalMinutes = stops.reduce((sum, s) => sum + (s.travelMinutes ?? 0) + (s.durationMinutes ?? 0), 0);
+function buildPlanBResponse(session, store) {
   return {
     sessionId: session.id,
-    totalMinutes,
+    status: session.status,
     availableMinutes: session.availableMinutes,
-    stops: stops.map((s) => serializeStop(s, store))
+    bufferMinutes: session.bufferMinutes,
+    usableMinutes: session.usableMinutes ?? Math.max(0, session.availableMinutes - session.bufferMinutes),
+    aiStyle: session.aiStyle === 'T' ? 'T' : 'F',
+    reframedGoal: toReframedGoal(session),
+    summary: session.summary,
+    courseConcept: session.courseConcept,
+    damiState: session.damiState,
+    course: buildCourseResponse(session, store)
+  };
+}
+
+function buildCourseResponse(session, store) {
+  return {
+    totalMinutes: session.stops.reduce(
+      (sum, stop) => sum + Number(stop.travelMinutes ?? 0) + Number(stop.durationMinutes ?? 0),
+      0
+    ),
+    stops: session.stops.map((stop) => serializeStop(stop, store)),
+    finalTravel: session.finalTravel ?? null
   };
 }
 
@@ -355,7 +427,12 @@ function serializeStop(stop, store) {
     durationMinutes: stop.durationMinutes,
     startTime: stop.startTime ?? null,
     endTime: stop.endTime ?? null,
-    status: stop.status
+    reason: stop.reason ?? null,
+    miniMission: stop.miniMission ?? null,
+    status: stop.status,
+    startedAt: stop.startedAt ?? null,
+    completedAt: stop.completedAt ?? null,
+    skippedAt: stop.skippedAt ?? null
   };
 }
 
@@ -363,60 +440,218 @@ function serializePlace(place) {
   return {
     id: place.id,
     name: place.name,
+    geometryType: place.geometryType ?? 'POINT',
+    primaryCategory: place.primaryCategory ?? place.activityType,
     category: place.activityType,
-    district: districtOf(place.address),
+    point: place.geometryType === 'SEGMENT' ? null : placeLocation(place),
+    startPoint: place.geometryType === 'SEGMENT' && place.startLatitude != null
+      ? { latitude: Number(place.startLatitude), longitude: Number(place.startLongitude) }
+      : null,
+    endPoint: place.geometryType === 'SEGMENT' && place.endLatitude != null
+      ? { latitude: Number(place.endLatitude), longitude: Number(place.endLongitude) }
+      : null,
+    encodedPolyline: place.encodedPolyline ?? null,
     imageUrl: place.imageUrls?.[0] ?? null,
-    durationMinutes: place.durationMinutes
+    durationMinutes: place.durationMinutes,
+    intensity: place.intensity ?? null,
+    location: placeLocation(place)
   };
 }
 
-function fallbackReason(place, input) {
-  if (isTired(input.condition) && LOW_INTENSITY.has(place.activityType)) {
-    return '피곤한 상태에서도 부담 없이 다녀올 수 있어요.';
+function findOwnedSession(context, userArg) {
+  const user = userArg ?? requireAuth(context);
+  const session = context.store.findPlanBSession(context.params.sessionId);
+  if (!session) throw new ApiError(404, 'SESSION_NOT_FOUND', 'Plan B 세션을 찾을 수 없습니다.');
+  if (session.userId !== user.id) throw new ApiError(403, 'FORBIDDEN', '본인 세션만 접근할 수 있습니다.');
+  return { session, user };
+}
+
+function findStop(session, stopId) {
+  const stop = session.stops.find((item) => item.id === stopId);
+  if (!stop) throw new ApiError(404, 'STOP_NOT_FOUND', '장소를 찾을 수 없습니다.');
+  return stop;
+}
+
+function assertSessionStatus(session, expected) {
+  if (session.status !== expected) {
+    throw new ApiError(409, 'INVALID_STATUS_TRANSITION', `현재 상태(${session.status})에서는 요청할 수 없습니다.`);
   }
-  return '현재 위치에서 가까워 짧은 시간 안에 다녀오기 좋아요.';
 }
 
-function isTired(condition) {
-  return condition === 'TIRED' || condition === 'VERY_TIRED';
+function validateRecoRequest(body) {
+  const out = {
+    date: assertDate(body.date),
+    startTime: assertTime(body.startTime, 'startTime'),
+    endTime: assertTime(body.endTime, 'endTime'),
+    brokenScheduleId: body.brokenScheduleId == null ? null : String(body.brokenScheduleId),
+    selfCareCategory: body.selfCareCategory == null ? null : assertEnum(body.selfCareCategory, CATEGORIES, 'selfCareCategory'),
+    customCategory: body.customCategory ?? null,
+    condition: body.condition == null ? null : assertEnum(body.condition, CONDITIONS, 'condition'),
+    continuityMode: body.continuityMode == null ? null : assertEnum(body.continuityMode, MODES, 'continuityMode')
+  };
+  const loc = body.location ?? {};
+  out.location = {
+    latitude: loc.latitude == null ? null : finiteNumber(loc.latitude, 'location.latitude'),
+    longitude: loc.longitude == null ? null : finiteNumber(loc.longitude, 'location.longitude')
+  };
+  return out;
 }
 
-function districtOf(address) {
-  const parts = String(address ?? '').split(' ');
-  return parts.find((p) => p.endsWith('구')) ?? parts[1] ?? '';
+function toAiContext(planContext) {
+  return {
+    condition: planContext.condition,
+    continuityMode: planContext.continuityMode,
+    currentLocation: planContext.currentLocation,
+    availableWindow: planContext.availableWindow,
+    brokenPlan: planContext.brokenPlan,
+    nextFixedSchedule: planContext.nextFixedSchedule,
+    aiStyle: planContext.aiStyle,
+    selfCareProfile: planContext.profile,
+    personalization: planContext.personalization ?? planContext.profile,
+    profile: planContext.profile,
+    todayCompletedActivities: planContext.todayCompletedActivities,
+    originalGoal: planContext.originalGoal
+  };
+}
+
+function toAiCandidate(candidate) {
+  return {
+    id: candidate.id,
+    name: candidate.name,
+    categories: candidate.categories,
+    durationMinutes: candidate.durationMinutes,
+    intensity: candidate.intensity,
+    travelFromCurrentMinutes: candidate.travelFromCurrentMinutes,
+    tags: candidate.tags
+  };
+}
+
+function newStopRecord(id, sessionId, placeId, place) {
+  return {
+    id,
+    sessionId,
+    placeId,
+    order: 0,
+    travelMinutes: 0,
+    durationMinutes: Number(place?.durationMinutes ?? 30),
+    startTime: null,
+    endTime: null,
+    reason: null,
+    miniMission: null,
+    status: 'NOT_STARTED',
+    startedAt: null,
+    completedAt: null,
+    skippedAt: null
+  };
+}
+
+function cloneStops(stops) {
+  return stops.map((stop) => ({ ...stop }));
+}
+
+function sanitizeReframedGoal(value, originalGoal, planContext) {
+  return {
+    originalGoal: nonEmpty(value?.originalGoal) ?? originalGoal,
+    newGoal: nonEmpty(value?.newGoal) ?? fallbackNewGoal(planContext),
+    reason: nonEmpty(value?.reason) ?? (planContext.aiStyle === 'T'
+      ? '현재 컨디션과 남은 시간을 기준으로 목표를 조정했습니다.'
+      : '현재 컨디션과 남은 시간을 고려해 부담을 조정했어요.')
+  };
+}
+
+function toReframedGoal(session) {
+  return session.reframedGoal ?? {
+    originalGoal: session.originalGoal ?? '',
+    newGoal: session.originalGoal ?? '',
+    reason: session.reframingReason ?? ''
+  };
+}
+
+function fallbackNewGoal(planContext) {
+  if (planContext.condition === 'VERY_TIRED' || planContext.condition === 'TIRED') {
+    return planContext.aiStyle === 'T' ? '저강도 자기관리 1회 수행' : '오늘은 무리하지 않고 가볍게 자기관리를 이어가기';
+  }
+  if (planContext.continuityMode === 'MINIMUM') return planContext.aiStyle === 'T'
+    ? '최소한의 자기관리 1회 수행'
+    : '오늘 가능한 최소한의 자기관리 이어가기';
+  return planContext.aiStyle === 'T'
+    ? `${planContext.originalGoal ?? '자기관리'}를 남은 시간에 맞춰 실행`
+    : `${planContext.originalGoal ?? '자기관리'}를 남은 시간에 맞게 이어가기`;
+}
+
+function fallbackConcept(planContext) {
+  if (planContext.condition === 'TIRED' || planContext.condition === 'VERY_TIRED') return planContext.aiStyle === 'T'
+    ? '저강도 회복 루틴'
+    : '부담을 낮춘 회복 루틴';
+  return planContext.aiStyle === 'T' ? '실행 가능한 자기관리 루틴' : '짧고 현실적인 자기관리 루틴';
+}
+
+function fallbackSummary(planContext) {
+  return planContext.condition === 'TIRED' || planContext.condition === 'VERY_TIRED'
+    ? (planContext.aiStyle === 'T' ? '현재 컨디션에 맞는 저강도 코스를 구성했습니다.' : '오늘은 무리하지 않고 현재 컨디션에 맞춰 이어가 볼게요.')
+    : (planContext.aiStyle === 'T' ? '남은 시간과 buffer 안에서 실행 가능한 코스입니다.' : '남은 시간 안에서 실천 가능한 Plan B를 구성했어요.');
+}
+
+function normalizeDamiState(value, category) {
+  const allowed = new Set(['SCHEDULE_CHECK', 'EXERCISE', 'EATING', 'MEDITATION', 'WALKING', 'RESTING', 'DEFAULT']);
+  if (allowed.has(value)) return value;
+  if (category === 'EXERCISE' || category === 'RUNNING') return 'EXERCISE';
+  if (category === 'DIET') return 'EATING';
+  if (category === 'MENTAL_HEALTH') return 'MEDITATION';
+  if (category === 'WALK') return 'WALKING';
+  return 'DEFAULT';
+}
+
+function fallbackStopReason(place, session) {
+  if (session.condition === 'TIRED' || session.condition === 'VERY_TIRED') return session.aiStyle === 'T'
+    ? '현재 컨디션에서 수행 가능한 강도입니다.'
+    : '현재 컨디션에서도 부담 없이 이어갈 수 있어요.';
+  return session.aiStyle === 'T'
+    ? `${place?.name ?? '이 장소'}는 남은 시간 안에 수행할 수 있습니다.`
+    : `${place?.name ?? '이 장소'}에서 현실적으로 실천할 수 있어요.`;
+}
+
+function noCandidateError() {
+  return new ApiError(409, 'NO_CANDIDATE_EXPERIENCE', '현재 조건에 맞는 장소를 찾지 못했습니다.');
+}
+
+function uniqueStrings(values) {
+  return Array.isArray(values) ? [...new Set(values.map(String))] : [];
+}
+
+function nonEmpty(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function finiteNumber(value, field) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) throw new ApiError(422, 'VALIDATION_ERROR', `${field}가 올바르지 않습니다.`);
+  return number;
 }
 
 function assertDate(value) {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new ApiError(422, 'VALIDATION_ERROR', 'date는 YYYY-MM-DD 형식이어야 합니다.');
-  }
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new ApiError(422, 'VALIDATION_ERROR', 'date는 YYYY-MM-DD 형식이어야 합니다.');
   return value;
 }
 
 function assertTime(value, field) {
-  if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
-    throw new ApiError(422, 'VALIDATION_ERROR', `${field}는 HH:MM 형식이어야 합니다.`);
-  }
+  if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) throw new ApiError(422, 'VALIDATION_ERROR', `${field}는 HH:MM 형식이어야 합니다.`);
   return value;
 }
 
 function assertEnum(value, set, field) {
-  const v = String(value).toUpperCase();
-  if (!set.has(v)) throw new ApiError(422, 'VALIDATION_ERROR', `${field} 값이 올바르지 않습니다.`);
-  return v;
+  const normalized = String(value).toUpperCase();
+  if (!set.has(normalized)) throw new ApiError(422, 'VALIDATION_ERROR', `${field} 값이 올바르지 않습니다.`);
+  return normalized;
 }
 
-function toMin(hhmm) {
-  const [h, m] = hhmm.split(':').map(Number);
-  return h * 60 + m;
+function toMinutes(value) {
+  const [hours, minutes] = String(value).split(':').map(Number);
+  return hours * 60 + minutes;
 }
 
-function toHHMM(min) {
-  const h = Math.floor(min / 60) % 24;
-  const m = min % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-
-function timeDiffMinutes(start, end) {
-  return toMin(end) - toMin(start);
+function toHHMM(totalMinutes) {
+  const hours = Math.floor(totalMinutes / 60) % 24;
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }

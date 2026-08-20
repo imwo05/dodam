@@ -30,11 +30,7 @@ export async function getMyPage(context) {
           profileImageUrl: n.profileImageUrl
         }))
       },
-      garden: {
-        level: garden.level,
-        completedCount: garden.completedCount,
-        imageUrl: garden.imageUrl
-      }
+      garden
     }
   };
 }

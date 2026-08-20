@@ -1,5 +1,7 @@
 import { createServer } from 'node:http';
 import { URL } from 'node:url';
+import { readFile } from 'node:fs/promises';
+import { extname, join, normalize } from 'node:path';
 import { createStore } from './data/store.js';
 import { ApiError } from './lib/errors.js';
 import { parseJsonBody, sendError, sendNoContent, sendSuccess } from './lib/http.js';
@@ -23,6 +25,12 @@ import {
   postConcern
 } from './modules/self-care/handlers.js';
 import { completeOnboarding } from './modules/onboarding/handlers.js';
+import {
+  createConversation,
+  getConversation,
+  addConversationMessage,
+  completeConversation
+} from './modules/onboarding/conversations.js';
 import { getHome } from './modules/home/handlers.js';
 import {
   createSchedule,
@@ -59,7 +67,9 @@ import {
   reorderStops,
   startSession,
   startStop,
-  completeStop
+  completeStop,
+  skipStop,
+  cancelSession
 } from './modules/plan-b/handlers.js';
 import {
   createReview,
@@ -113,6 +123,10 @@ const routes = [
   ['GET', '/users/me/neighbors', getNeighbors],
   ['GET', '/users/me/garden', getGarden],
   ['POST', '/onboarding/complete', completeOnboarding],
+  ['POST', '/onboarding/conversations', createConversation],
+  ['GET', '/onboarding/conversations/:conversationId', getConversation],
+  ['POST', '/onboarding/conversations/:conversationId/messages', addConversationMessage],
+  ['POST', '/onboarding/conversations/:conversationId/complete', completeConversation],
 
   // Home
   ['GET', '/home', getHome],
@@ -153,8 +167,10 @@ const routes = [
   ['PATCH', '/plan-b/:sessionId/course/order', reorderStops],
   ['POST', '/plan-b/:sessionId/regenerate', regenerate],
   ['POST', '/plan-b/:sessionId/start', startSession],
+  ['POST', '/plan-b/:sessionId/cancel', cancelSession],
   ['POST', '/plan-b/:sessionId/stops/:stopId/start', startStop],
   ['POST', '/plan-b/:sessionId/stops/:stopId/complete', completeStop],
+  ['POST', '/plan-b/:sessionId/stops/:stopId/skip', skipStop],
   ['GET', '/plan-b/:sessionId', getSession],
 
   // Review
@@ -213,6 +229,9 @@ export function createRequestHandler(options = {}) {
       if (req.method === 'OPTIONS') return sendNoContent(res);
 
       const requestUrl = new URL(req.url ?? '/', 'http://localhost');
+      if (!requestUrl.pathname.startsWith(API_PREFIX)) {
+        return serveFrontend(requestUrl.pathname, res);
+      }
       const route = matchRoute(req.method, requestUrl.pathname);
 
       if (!route) {
@@ -270,4 +289,36 @@ function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS');
+}
+
+async function serveFrontend(pathname, res) {
+  const requestedPath = pathname === '/' ? '/index.html' : pathname;
+  const publicRoot = join(process.cwd(), 'public');
+  const filePath = normalize(join(publicRoot, requestedPath));
+
+  if (!filePath.startsWith(`${publicRoot}/`)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('Forbidden');
+  }
+
+  try {
+    const body = await readFile(filePath);
+    const contentType = {
+      '.css': 'text/css; charset=utf-8',
+      '.html': 'text/html; charset=utf-8',
+      '.js': 'text/javascript; charset=utf-8',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.svg': 'image/svg+xml'
+    }[extname(filePath)] ?? 'application/octet-stream';
+    res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-cache' });
+    return res.end(body);
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end('Not Found');
+    }
+    throw error;
+  }
 }

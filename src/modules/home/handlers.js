@@ -18,7 +18,13 @@ export async function getHome(context) {
   let places = store.listPlaces({});
   if (lat != null && lng != null) {
     places = places
-      .map((p) => ({ p, d: Math.hypot(lat - (p.latitude ?? 999), lng - (p.longitude ?? 999)) }))
+      .map((p) => ({
+        p,
+        d: Math.hypot(
+          lat - (p.pointLatitude ?? p.startLatitude ?? p.latitude ?? 999),
+          lng - (p.pointLongitude ?? p.startLongitude ?? p.longitude ?? 999)
+        )
+      }))
       .sort((a, b) => a.d - b.d)
       .map((x) => x.p);
   }
@@ -42,11 +48,7 @@ export async function getHome(context) {
         name: p.name,
         imageUrl: p.imageUrls?.[0] ?? null
       })),
-      garden: {
-        level: garden.level,
-        imageUrl: garden.imageUrl,
-        completedCount: garden.completedCount
-      }
+      garden
     }
   };
 }

@@ -13,6 +13,7 @@ export function serializeSchedule(s) {
     title: s.title,
     isFixed: s.isFixed,
     selfCareCategory: s.selfCareCategory,
+    location: s.location ?? null,
     placeId: s.placeId,
     source: s.source
   };
@@ -104,6 +105,7 @@ export async function copySchedules(context) {
         title: s.title,
         isFixed: s.isFixed,
         selfCareCategory: s.selfCareCategory,
+        location: s.location,
         placeId: s.placeId,
         source: 'COPIED'
       })
@@ -128,8 +130,24 @@ function validateScheduleItem(body, { withDate = false, partial = false } = {}) 
     out.isFixed = body.isFixed;
   }
   if (body.selfCareCategory !== undefined) out.selfCareCategory = assertCategoryNullable(body.selfCareCategory);
+  if (body.location !== undefined) out.location = parseLocation(body.location);
   if (body.placeId !== undefined) out.placeId = body.placeId ?? null;
   return out;
+}
+
+function parseLocation(value) {
+  if (value === null) return null;
+  if (typeof value !== 'object') throw new ApiError(422, 'VALIDATION_ERROR', 'location은 객체여야 합니다.');
+  const latitude = Number(value.latitude);
+  const longitude = Number(value.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw new ApiError(422, 'VALIDATION_ERROR', 'location 좌표가 올바르지 않습니다.');
+  }
+  return {
+    latitude,
+    longitude,
+    label: value.label == null ? null : assertRequiredString(value.label, 'location.label', { min: 1, max: 255 })
+  };
 }
 
 function findOwnedSchedule(context, userId) {

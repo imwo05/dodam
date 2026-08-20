@@ -17,6 +17,7 @@ export function serializeUser(user) {
     email: user.email,
     age: user.age,
     profileImageUrl: user.profileImageUrl,
+    aiStyle: user.aiStyle === 'T' ? 'T' : 'F',
     onboardingCompleted: user.onboardingCompleted
   };
 }

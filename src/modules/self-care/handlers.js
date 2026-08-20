@@ -2,6 +2,7 @@ import { ApiError } from '../../lib/errors.js';
 import { assertRequiredString } from '../../lib/validation.js';
 import { requireAuth } from '../auth/service.js';
 import { analyzeConcern } from './concern.js';
+import { normalizePersonalizationPatch } from '../onboarding/profile.js';
 
 const CATEGORIES = new Set(['EXERCISE', 'DIET', 'WALK', 'RUNNING', 'MENTAL_HEALTH', 'CUSTOM']);
 
@@ -14,12 +15,18 @@ function validateProfile(body, { partial = false } = {}) {
   if (need('availableMinutes')) out.availableMinutes = assertPositiveInt(body.availableMinutes, 'availableMinutes', 1440);
   if (need('residentialRegion')) out.residentialRegion = assertRequiredString(body.residentialRegion, 'residentialRegion', { min: 1, max: 50 });
   if (body.lifeRegion !== undefined) out.lifeRegion = body.lifeRegion === null ? null : assertRequiredString(body.lifeRegion, 'lifeRegion', { min: 1, max: 50 });
+  if (body.aiStyle !== undefined) {
+    const style = String(body.aiStyle).toUpperCase();
+    if (!['T', 'F'].includes(style)) throw new ApiError(422, 'VALIDATION_ERROR', 'aiStyle은 T 또는 F여야 합니다.');
+    out.aiStyle = style;
+  }
   if (need('planChangeReasons')) {
     if (!Array.isArray(body.planChangeReasons)) {
       throw new ApiError(422, 'VALIDATION_ERROR', 'planChangeReasons는 배열이어야 합니다.');
     }
     out.planChangeReasons = body.planChangeReasons.map((r) => assertRequiredString(r, 'planChangeReasons[]', { min: 1, max: 50 }));
   }
+  Object.assign(out, normalizePersonalizationPatch(body));
   return out;
 }
 
