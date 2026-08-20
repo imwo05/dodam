@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getOnboardingOptions, type OnboardingOptions } from '../../api/onboarding';
 import { useAuth } from '../../contexts/AuthContext';
@@ -51,11 +51,16 @@ function SurfaceSelect({ id, label, value, options, onChange, disabled = false }
   );
 }
 
-function SurfaceInput({ id, label, value, placeholder, onChange }: { id: string; label: string; value: string; placeholder?: string; onChange: (value: string) => void }) {
+function CustomChipInput({ value, onChange, onCommit }: { value: string; onChange: (value: string) => void; onCommit: () => void }) {
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    onCommit();
+  }
   return (
-    <div className={`onboarding-surface-control onboarding-surface-control--input ${value ? 'is-selected' : ''}`}>
-      <img src={value ? '/assets/onboarding-selected-surface.png' : '/assets/onboarding-option-surface.png'} alt="" aria-hidden="true" />
-      <input id={id} aria-label={label} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+    <div className="onboarding-custom-chip">
+      <img src="/assets/onboarding-option-surface.png" alt="" aria-hidden="true" />
+      <input aria-label="직접 입력한 계획 변경 이유" enterKeyHint="done" value={value} placeholder="직접 입력" onChange={(event) => onChange(event.target.value)} onKeyDown={handleKeyDown} />
     </div>
   );
 }
@@ -90,7 +95,6 @@ export function BasicOnboardingPage() {
   const { accessToken } = useAuth();
   const { profile, saveBasicProfile, loading, error: onboardingError } = useOnboarding();
   const [values, setValues] = useState<BasicValues>(initialValues);
-  const [customReasonSelected, setCustomReasonSelected] = useState(false);
   const [customReason, setCustomReason] = useState('');
   const [regions, setRegions] = useState<OnboardingOptions['regions']>([]);
   const [optionsError, setOptionsError] = useState('');
@@ -122,11 +126,7 @@ export function BasicOnboardingPage() {
     }));
   }, [profile]);
 
-  const selectedReasons = useMemo(() => {
-    const reasons = [...values.planChangeReasons];
-    if (customReasonSelected && customReason.trim()) reasons.push(customReason.trim());
-    return [...new Set(reasons)];
-  }, [customReason, customReasonSelected, values.planChangeReasons]);
+  const customReasons = values.planChangeReasons.filter((reason) => !REASON_OPTIONS.includes(reason));
 
   function updateValue<K extends keyof BasicValues>(key: K, value: BasicValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
@@ -153,18 +153,29 @@ export function BasicOnboardingPage() {
     setValidationError('');
   }
 
+  function addCustomReason() {
+    const reason = customReason.trim().replace(/\s+/g, ' ');
+    if (!reason) {
+      setCustomReason('');
+      return;
+    }
+    if (values.planChangeReasons.includes(reason)) {
+      setValidationError('이미 선택한 이유예요.');
+      return;
+    }
+    setValues((current) => ({ ...current, planChangeReasons: [...current.planChangeReasons, reason] }));
+    setCustomReason('');
+    setValidationError('');
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!accessToken) {
       setValidationError('로그인 후 기본 정보를 저장해 주세요.');
       return;
     }
-    if (!values.purpose.length || !values.weeklyTargetCount || !values.availableMinutes || !values.residentialRegion || !values.lifeRegion || !selectedReasons.length) {
+    if (!values.purpose.length || !values.weeklyTargetCount || !values.availableMinutes || !values.residentialRegion || !values.lifeRegion || !values.planChangeReasons.length) {
       setValidationError('모든 기본 정보를 선택해 주세요.');
-      return;
-    }
-    if (customReasonSelected && !customReason.trim()) {
-      setValidationError('직접 입력한 이유를 적어 주세요.');
       return;
     }
 
@@ -176,7 +187,7 @@ export function BasicOnboardingPage() {
         availableMinutes: Number(values.availableMinutes),
         residentialRegion: values.residentialRegion,
         lifeRegion: values.lifeRegion,
-        planChangeReasons: selectedReasons,
+        planChangeReasons: values.planChangeReasons,
         aiStyle: values.aiStyle
       });
       navigate('/onboarding/chat');
@@ -220,9 +231,9 @@ export function BasicOnboardingPage() {
             <p className="basic-onboarding-label">주로 계획이 바뀌는 이유 <span>*</span></p>
             <div className="onboarding-reason-grid">
               {REASON_OPTIONS.map((reason) => <ReasonOption key={reason} label={reason} selected={values.planChangeReasons.includes(reason)} onClick={() => toggleReason(reason)} />)}
-              <ReasonOption label={customReason.trim() || '직접 입력'} selected={customReasonSelected} onClick={() => { setCustomReasonSelected((current) => !current); setValidationError(''); }} />
+              {customReasons.map((reason) => <ReasonOption key={reason} label={reason} selected onClick={() => toggleReason(reason)} />)}
+              <CustomChipInput value={customReason} onChange={setCustomReason} onCommit={addCustomReason} />
             </div>
-            {customReasonSelected ? <SurfaceInput id="basic-custom-reason" label="직접 입력한 계획 변경 이유" value={customReason} onChange={setCustomReason} /> : null}
           </div>
           <div className="basic-onboarding-field basic-onboarding-field--style">
             <p className="basic-onboarding-label">담이가 어떻게 이야기해 주면 좋나요?</p>
