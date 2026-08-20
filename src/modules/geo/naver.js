@@ -1,6 +1,7 @@
 import { ApiError } from '../../lib/errors.js';
 
-const SEARCH_URL = 'https://openapi.naver.com/v1/search/local.json';
+// Search API migrated from NAVER Developers to NAVER API HUB in 2026.
+const SEARCH_URL = 'https://naverapihub.apigw.ntruss.com/search/v1/local';
 const GEOCODE_URL = 'https://maps.apigw.ntruss.com/map-geocode/v2/geocode';
 const REVERSE_GEOCODE_URL = 'https://maps.apigw.ntruss.com/map-reversegeocode/v2/gc';
 
@@ -20,7 +21,8 @@ export function buildNaverGeoClient({ env = process.env, fetchImpl = globalThis.
       const url = new URL(SEARCH_URL);
       url.searchParams.set('query', query);
       url.searchParams.set('display', String(Math.min(Math.max(display, 1), 5)));
-      const payload = await request(fetchImpl, url, { 'X-Naver-Client-Id': searchId, 'X-Naver-Client-Secret': searchSecret });
+      url.searchParams.set('format', 'json');
+      const payload = await request(fetchImpl, url, apiHubHeaders(searchId, searchSecret));
       return payload.items.map((item) => ({
         name: stripTags(item.title), category: item.category, address: item.roadAddress || item.address,
         telephone: item.telephone || null
@@ -47,6 +49,7 @@ export function buildNaverGeoClient({ env = process.env, fetchImpl = globalThis.
 }
 
 function mapHeaders(id, secret) { return { 'x-ncp-apigw-api-key-id': id, 'x-ncp-apigw-api-key': secret }; }
+function apiHubHeaders(id, secret) { return { 'x-ncp-apigw-api-key-id': id, 'x-ncp-apigw-api-key': secret }; }
 function requireCredentials(id, secret, service) { if (!id || !secret) throw new ApiError(503, 'NAVER_API_NOT_CONFIGURED', `${service} 환경변수가 설정되지 않았습니다.`); }
 async function request(fetchImpl, url, headers) {
   const response = await fetchImpl(url, { headers });

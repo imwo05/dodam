@@ -24,6 +24,6 @@ npm run validate:place-db
 2. 주소·중복·생활권을 검토한 뒤 `dodam_places_beta.csv`에 후보를 추가합니다.
 3. 산책 구간과 상황별 경험은 현장 답사 후 각각 Segment와 Experience CSV에 추가합니다.
 
-`NAVER_MAPS_CLIENT_ID/SECRET`이 설정되면 `/geo/reverse`와 주소 기반 `/geo/addresses`가 Maps API를 사용합니다. 여기에 `NAVER_SEARCH_CLIENT_ID/SECRET`까지 설정하면 `/geo/addresses`가 지역 검색 후보를 먼저 수집한 뒤 각 후보를 좌표화합니다. 키가 없는 개발 환경에서는 응답의 `provider: "MOCK"`으로 명확히 구분된 데모 결과를 반환합니다. API Secret은 서버 환경변수에만 둡니다.
+`NAVER_MAPS_CLIENT_ID/SECRET`이 설정되면 `/geo/reverse`와 주소 기반 `/geo/addresses`가 Maps API를 사용합니다. 여기에 NAVER API HUB Search API의 `NAVER_SEARCH_CLIENT_ID/SECRET`까지 설정하면 `/geo/addresses`가 지역 검색 후보를 먼저 수집한 뒤 각 후보를 좌표화합니다. Search API는 `https://naverapihub.apigw.ntruss.com/search/v1/local` 및 `X-NCP-APIGW-API-KEY-ID`/`X-NCP-APIGW-API-KEY` 헤더를 사용합니다. 키가 없는 개발 환경에서는 응답의 `provider: "MOCK"`으로 명확히 구분된 데모 결과를 반환합니다. API Secret은 서버 환경변수에만 둡니다.
 
 이 프로젝트는 도보·대중교통 시간을 고정 저장하지 않습니다. `estimated_walk_min`은 현장 검수된 산책 구간의 기준 소요 시간이며, 사용자별 길찾기는 네이버 지도 앱 링크 등 클라이언트 실시간 경로로 처리합니다.
