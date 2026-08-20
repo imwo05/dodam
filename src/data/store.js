@@ -1,4 +1,5 @@
 import { placesSeed, seedUsers } from './seed.js';
+import { betaPointsAsPlaces } from './place-db.js';
 
 // 문자열 ID 생성기 (usr_001, plc_002 ...)
 function makeId(prefix, n) {
@@ -45,7 +46,7 @@ export function createStore() {
   }
 
   // ---- 시드 장소 로드 ----
-  for (const place of placesSeed) {
+  for (const place of [...placesSeed, ...betaPointsAsPlaces()]) {
     state.places.set(place.id, { ...place, imageUrls: [...(place.imageUrls ?? [])] });
   }
 

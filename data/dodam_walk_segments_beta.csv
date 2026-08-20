@@ -1,0 +1,5 @@
+segment_id,segment_name,district,start_place_id,end_place_id,distance_m,estimated_walk_min,activity_intensity,route_description,safety_tip,mood_tags,source_status
+sg_gwanak_001,낙성대공원 순환,관악,pt_gwanak_001,pt_gwanak_001,1500,25,LOW,공원 주변을 천천히 걷는 구간,조명 있는 길을 이용하세요,#공원 #산책,CANDIDATE
+sg_gwanak_002,낙성대역-공원 연결,관악,pt_gwanak_007,pt_gwanak_001,900,15,LOW,역에서 공원까지 걷는 구간,횡단보도를 살피세요,#이동 #낙성대,CANDIDATE
+sg_gwanak_003,관악문화재단 짧은 산책,관악,pt_gwanak_002,pt_gwanak_005,500,10,LOW,도서관과 아트홀 일정 사이를 걷는 구간,공연 시간에는 여유 있게 이동하세요,#문화 #신림,CANDIDATE
+sg_gwanak_004,낙성대 운동 회복 동선,관악,pt_gwanak_004,pt_gwanak_001,700,12,LOW,운동 뒤 공원까지 걷는 구간,수분을 챙기세요,#운동 #회복,CANDIDATE

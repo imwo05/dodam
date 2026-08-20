@@ -1,0 +1,7 @@
+experience_id,experience_name,district,place_id,segment_id,scenario,time_of_day,weather,available_minutes,activity_intensity,description,experience_tip,mood_tags,review_status
+exp_gwanak_001,점심 후 낙성대 산책,관악,pt_gwanak_001,sg_gwanak_001,식사 후 걷고 싶을 때,AFTERNOON,CLEAR,25,LOW,공원을 천천히 걷는 경험,짧은 순환 동선을 정하세요,#산책 #낙성대,DRAFT
+exp_gwanak_002,비 오는 날 도서관 집중,관악,pt_gwanak_002,,비가 와도 집중하고 싶을 때,AFTERNOON,RAIN,60,LOW,도서관에서 읽고 작업하는 경험,운영 시간을 확인하세요,#독서 #신림,DRAFT
+exp_gwanak_003,청년 정보와 숨 고르기,관악,pt_gwanak_003,,생활 정보를 찾고 싶을 때,AFTERNOON,ANY,40,LOW,청년청에서 지원 정보를 확인하는 경험,프로그램을 확인하세요,#청년공간,DRAFT
+exp_gwanak_004,퇴근 후 가벼운 몸풀기,관악,pt_gwanak_004,sg_gwanak_004,몸을 움직이고 싶을 때,EVENING,ANY,45,MEDIUM,운동 후 공원까지 걸어 회복하는 경험,무리하지 마세요,#운동 #회복,DRAFT
+exp_gwanak_005,공연 전 문화 산책,관악,pt_gwanak_005,sg_gwanak_003,공연 전 시간이 있을 때,EVENING,ANY,20,LOW,아트홀 주변을 짧게 걷는 경험,입장 시간을 확인하세요,#문화 #신림,DRAFT
+exp_gwanak_006,약속 전 낙성대 15분,관악,pt_gwanak_007,sg_gwanak_002,다음 약속 전 시간이 비었을 때,EVENING,ANY,15,LOW,역에서 공원 방향으로 걷는 경험,돌아올 시간을 정하세요,#짧은산책,DRAFT

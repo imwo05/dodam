@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "node src/server.js",
-    "start:ai": "node ai-service/server.js"
+    "start:ai": "node ai-service/server.js",
+    "validate:place-db": "node scripts/validate-place-db.js"
   }
 }
