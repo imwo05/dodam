@@ -28,6 +28,15 @@ AI_PORT=8000 node ai-service/server.js
 node src/server.js        # http://localhost:3000/api/v1
 ```
 
+## Frontend (Figma-first MVP)
+
+```bash
+npm run dev               # http://localhost:5173
+npm run build             # production bundle in dist/
+```
+
+The Vite dev server proxies `/api` to the backend on port `3000`. The first implementation phase includes the shared mobile shell, exact Figma status/navigation assets, and the start screen. Login, signup, onboarding, and the data-backed app screens are wired as route boundaries for the following phases.
+
 Node 20 이상 필요. 별도 설치 패키지 없음.
 
 ## 주요 도메인
