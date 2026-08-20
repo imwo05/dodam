@@ -1,4 +1,5 @@
 import { placeLocation } from './route-provider.js';
+import { normalizePlanBLocation } from './location.js';
 
 export function retrieveCandidates({ store, placeRepository, planContext, routeProvider, distanceProvider, excludePlaceIds = [] }) {
   if (placeRepository) {
@@ -21,7 +22,7 @@ export function retrieveCandidates({ store, placeRepository, planContext, routeP
 
 function retrieveCandidatesFromPlaces({ places, planContext, routeProvider, distanceProvider, excludePlaceIds = [] }) {
   const excluded = new Set(excludePlaceIds.map(String));
-  const currentLocation = planContext.currentLocation;
+  const currentLocation = normalizePlanBLocation(planContext.currentLocation);
   const requestedCategory = planContext.selfCareCategory;
   const usableMinutes = planContext.availableWindow.usableMinutes;
 
@@ -32,7 +33,7 @@ function retrieveCandidatesFromPlaces({ places, planContext, routeProvider, dist
     .filter((place) => isIntensityCompatible(place, planContext.condition))
     .map((place) => {
       const location = placeLocation(place);
-      const travelFromCurrentMinutes = routeProvider.getTravelTime(currentLocation, location);
+      const travelFromCurrentMinutes = currentLocation ? routeProvider.getTravelTime(currentLocation, location) : 0;
       const durationMinutes = Number(place.durationMinutes ?? 30);
       const requiredMinutes = travelFromCurrentMinutes + durationMinutes;
       return {
@@ -48,7 +49,7 @@ function retrieveCandidatesFromPlaces({ places, planContext, routeProvider, dist
         requiredMinutes,
         distanceKm: currentLocation ? distanceProvider.getDistanceKm(currentLocation, location) : null,
         place,
-        score: scoreCandidate(place, planContext, travelFromCurrentMinutes, requiredMinutes)
+        score: scoreCandidate(place, planContext, travelFromCurrentMinutes, requiredMinutes, currentLocation)
       };
     })
     .filter((candidate) => candidate.durationMinutes <= usableMinutes)
@@ -76,14 +77,14 @@ function isIntensityCompatible(place, condition) {
   return true;
 }
 
-function scoreCandidate(place, planContext, travelFromCurrentMinutes, requiredMinutes) {
+function scoreCandidate(place, planContext, travelFromCurrentMinutes, requiredMinutes, currentLocation) {
   let score = 0.5;
   if (planContext.selfCareCategory && place.activityType === planContext.selfCareCategory) score += 0.25;
   if ((planContext.condition === 'TIRED' || planContext.condition === 'VERY_TIRED')
       && place.intensity === 'LOW') score += 0.15;
   if ((planContext.continuityMode === 'EASY' || planContext.continuityMode === 'MINIMUM')
       && place.intensity === 'LOW') score += 0.1;
-  if (travelFromCurrentMinutes <= 10) score += 0.1;
+  if (currentLocation && travelFromCurrentMinutes <= 10) score += 0.1;
   if (requiredMinutes <= planContext.availableWindow.usableMinutes * 0.6) score += 0.05;
   score += preferenceScore(place, planContext.personalization ?? planContext.profile);
   return score;

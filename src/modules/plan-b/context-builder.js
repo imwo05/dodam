@@ -1,5 +1,6 @@
 import { ApiError } from '../../lib/errors.js';
 import { profileForResponse } from '../onboarding/profile.js';
+import { normalizePlanBLocation } from './location.js';
 
 export const PLAN_B_TIMEZONE = 'Asia/Seoul';
 
@@ -58,7 +59,7 @@ export async function buildPlanBContext({ store, repositories, user, input }) {
     condition: input.condition,
     continuityMode: input.continuityMode,
     aiStyle,
-    currentLocation: input.location,
+    currentLocation: normalizePlanBLocation(input.location),
     availableWindow: {
       start: `${input.date}T${input.startTime}:00+09:00`,
       end: `${input.date}T${effectiveEndTime}:00+09:00`,
@@ -97,15 +98,17 @@ export async function buildPlanBContext({ store, repositories, user, input }) {
 }
 
 export function contextFromSession(session) {
-  if (session.contextSnapshot) return structuredClone(session.contextSnapshot);
+  if (session.contextSnapshot) {
+    const context = structuredClone(session.contextSnapshot);
+    context.currentLocation = normalizePlanBLocation(context.currentLocation);
+    return context;
+  }
   return {
     timezone: PLAN_B_TIMEZONE,
     condition: session.condition,
     continuityMode: session.continuityMode,
     aiStyle: session.aiStyle === 'T' ? 'T' : 'F',
-    currentLocation: session.latitude == null
-      ? null
-      : { latitude: session.latitude, longitude: session.longitude },
+    currentLocation: normalizePlanBLocation({ latitude: session.latitude, longitude: session.longitude }),
     availableWindow: {
       start: `${session.date}T${session.startTime}:00+09:00`,
       end: `${session.date}T${session.endTime}:00+09:00`,

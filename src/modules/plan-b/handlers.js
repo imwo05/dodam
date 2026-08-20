@@ -3,6 +3,7 @@ import { requireAuth } from '../auth/service.js';
 import { buildPlanBContext, contextFromSession } from './context-builder.js';
 import { maxStopsFor, retrieveCandidates } from './candidate-retriever.js';
 import { createDistanceProvider } from './distance-provider.js';
+import { normalizePlanBLocation } from './location.js';
 import { createRouteProvider, placeLocation } from './route-provider.js';
 
 const CONDITIONS = new Set(['VERY_GOOD', 'GOOD', 'NORMAL', 'TIRED', 'VERY_TIRED']);
@@ -301,9 +302,7 @@ function tryCalculate(session, candidates, store) {
 }
 
 function calculateCourse(session, stops, store) {
-  const currentLocation = session.latitude == null
-    ? null
-    : { latitude: session.latitude, longitude: session.longitude };
+  const currentLocation = normalizePlanBLocation({ latitude: session.latitude, longitude: session.longitude });
   let cursor = toMinutes(session.startTime);
   let previousLocation = currentLocation;
   const recalculated = stops.map((stop, index) => {
@@ -405,6 +404,7 @@ function finishStop(store, session, stops, stopId, action) {
 function buildPlanBResponse(session, store) {
   return {
     sessionId: session.id,
+    date: session.date,
     status: session.status,
     availableMinutes: session.availableMinutes,
     bufferMinutes: session.bufferMinutes,
@@ -501,11 +501,7 @@ function validateRecoRequest(body) {
     condition: body.condition == null ? null : assertEnum(body.condition, CONDITIONS, 'condition'),
     continuityMode: body.continuityMode == null ? null : assertEnum(body.continuityMode, MODES, 'continuityMode')
   };
-  const loc = body.location ?? {};
-  out.location = {
-    latitude: loc.latitude == null ? null : finiteNumber(loc.latitude, 'location.latitude'),
-    longitude: loc.longitude == null ? null : finiteNumber(loc.longitude, 'location.longitude')
-  };
+  out.location = normalizePlanBLocation(body.location);
   return out;
 }
 
@@ -634,12 +630,6 @@ function uniqueStrings(values) {
 
 function nonEmpty(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
-
-function finiteNumber(value, field) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) throw new ApiError(422, 'VALIDATION_ERROR', `${field}가 올바르지 않습니다.`);
-  return number;
 }
 
 function assertDate(value) {
