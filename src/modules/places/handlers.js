@@ -241,7 +241,7 @@ function serializeMapPlace(place) {
 
 async function findPlaceOrThrow(context, { includeInactive = false } = {}) {
   const place = await context.repositories.place.getById(context.params.placeId, { includeInactive });
-  if (!place || (!includeInactive && place.status !== 'ACTIVE') || place.status === 'DELETED') {
+  if (!place || (!includeInactive && (place.status ?? 'ACTIVE') !== 'ACTIVE') || place.status === 'DELETED') {
     throw new ApiError(404, 'PLACE_NOT_FOUND', '장소를 찾을 수 없습니다.');
   }
   return place;

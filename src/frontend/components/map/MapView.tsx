@@ -121,7 +121,9 @@ export function MapView(props: MapViewProps) {
     }).catch((requestError: unknown) => {
       if (!active) return;
       setStatus('error');
-      setError(requestError instanceof Error ? requestError.message : '지도를 불러오지 못했어요.');
+      setError(requestError instanceof Error && requestError.message.includes('불러오지')
+        ? requestError.message
+        : '지도를 불러오지 못했어요.');
     });
 
     return () => {
@@ -167,6 +169,19 @@ export function MapView(props: MapViewProps) {
   return (
     <div className={classes} role="region" aria-label={ariaLabel} data-map-provider="naver" data-map-mode={mode}>
       <div ref={mapElementRef} className="map-view__canvas" aria-hidden={status !== 'ready'} />
+      {status === 'error' && mode !== 'EXPLORE' ? (
+        <div className={`map-view__fallback map-view__fallback--${mode.toLowerCase()}`} aria-hidden="true">
+          {mode === 'SEGMENT' ? <>
+            <img className="map-view__fallback-start" src="/assets/place-pin.svg" alt="" />
+            <img className="map-view__fallback-line" src="/assets/place-segment-line.svg" alt="" />
+            <img className="map-view__fallback-end" src="/assets/place-pin.svg" alt="" />
+            <span>시작 · 종료 위치</span>
+          </> : <>
+            <img src="/assets/place-pin.svg" alt="" />
+            <span>선택 위치</span>
+          </>}
+        </div>
+      ) : null}
       {status === 'loading' ? <p className="map-view__status">지도를 불러오는 중이에요.</p> : null}
       {status === 'error' ? <p className="map-view__status map-view__status--error" role="status">{error}</p> : null}
     </div>
