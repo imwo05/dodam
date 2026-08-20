@@ -32,11 +32,10 @@ export function validatePlaceSource(source) {
   const pointIds = new Set();
   const segmentIds = new Set();
 
-  if (points.length !== 16) errors.push(`expected 16 points, found ${points.length}`);
-  if (segments.length !== 8) errors.push(`expected 8 segments, found ${segments.length}`);
-  if (experiences.length !== 12) errors.push(`expected 12 experiences, found ${experiences.length}`);
+  if (!points.length) errors.push('expected at least one point');
 
   for (const point of points) {
+    if (!point.place_id) errors.push('point: place_id is required');
     if (pointIds.has(point.place_id)) errors.push(`${point.place_id}: duplicate place_id`);
     pointIds.add(point.place_id);
     if (point.place_kind !== 'POINT') errors.push(`${point.place_id}: place_kind must be POINT`);
@@ -47,7 +46,11 @@ export function validatePlaceSource(source) {
   }
 
   for (const segment of segments) {
+    if (!segment.segment_id) errors.push('segment: segment_id is required');
     if (segmentIds.has(segment.segment_id)) errors.push(`${segment.segment_id}: duplicate segment_id`);
+    for (const field of ['segment_name', 'district', 'start_place_id', 'end_place_id', 'route_description', 'safety_tip', 'mood_tags', 'source_status']) {
+      if (!segment[field]) errors.push(`${segment.segment_id}: ${field} is required`);
+    }
     segmentIds.add(segment.segment_id);
     if (!pointIds.has(segment.start_place_id)) errors.push(`${segment.segment_id}: missing start point ${segment.start_place_id}`);
     if (!pointIds.has(segment.end_place_id)) errors.push(`${segment.segment_id}: missing end point ${segment.end_place_id}`);
@@ -60,6 +63,10 @@ export function validatePlaceSource(source) {
   }
 
   for (const experience of experiences) {
+    if (!experience.experience_id) errors.push('experience: experience_id is required');
+    for (const field of ['experience_name', 'district', 'place_id', 'scenario', 'time_of_day', 'weather', 'description', 'experience_tip', 'mood_tags', 'review_status']) {
+      if (!experience[field]) errors.push(`${experience.experience_id}: ${field} is required`);
+    }
     if (!pointIds.has(experience.place_id)) errors.push(`${experience.experience_id}: missing point ${experience.place_id}`);
     if (experience.segment_id && !segmentIds.has(experience.segment_id)) {
       errors.push(`${experience.experience_id}: missing segment ${experience.segment_id}`);
@@ -117,7 +124,7 @@ export function buildSeedPlaces(source) {
       tags: atmosphereTags,
       intensity: intensities.length === 1 ? intensities[0] : null,
       soloFriendly: null,
-      imageUrls: point.image_url ? [point.image_url] : [],
+      imageUrls: imageUrlsFor(point.image_url),
       status: 'ACTIVE',
       source: 'SEED',
       createdAt: '2026-08-20T00:00:00.000Z',
@@ -222,7 +229,7 @@ function parseCsvLine(line) {
   let quoted = false;
   for (let index = 0; index < line.length; index += 1) {
     const char = line[index];
-    if (char === '"' && line[index + 1] === '"') {
+    if (quoted && char === '"' && line[index + 1] === '"') {
       cell += '"';
       index += 1;
     } else if (char === '"') {
@@ -255,6 +262,11 @@ function unique(values) {
 function normalizeIntensity(value) {
   const normalized = String(value ?? '').toUpperCase();
   return ['LOW', 'MEDIUM', 'HIGH'].includes(normalized) ? normalized : null;
+}
+
+function imageUrlsFor(value) {
+  const imageUrl = String(value ?? '').trim();
+  return imageUrl && !/^"+$/.test(imageUrl) ? [imageUrl] : [];
 }
 
 function number(value) {

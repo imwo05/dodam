@@ -51,11 +51,11 @@ async function createUser(base, label) {
   return { token: data(response).accessToken, user: data(response).user };
 }
 
-test('Place seed source parses 16 points, 8 segments, 12 experiences and resolves references', () => {
+test('Place seed source parses the authoritative points, segments, experiences, and references', () => {
   const source = loadPlaceSource();
-  assert.equal(source.points.length, 16);
-  assert.equal(source.segments.length, 8);
-  assert.equal(source.experiences.length, 12);
+  assert.equal(source.points.length, 306);
+  assert.equal(source.segments.length, 3);
+  assert.equal(source.experiences.length, 306);
   const pointIds = new Set(source.points.map((point) => point.place_id));
   const segmentIds = new Set(source.segments.map((segment) => segment.segment_id));
   assert.ok(source.segments.every((segment) => pointIds.has(segment.start_place_id) && pointIds.has(segment.end_place_id)));
@@ -70,10 +70,10 @@ test('Place seed import is deterministic and idempotent in the in-memory adapter
   for (const place of places) await repository.upsertSeed(place);
   for (const place of places) await repository.upsertSeed(place);
   const imported = (await repository.list({ includeInactive: true })).filter((place) => place.source === 'SEED');
-  assert.equal(imported.length, 24);
-  assert.equal(new Set(imported.map((place) => place.id)).size, 24);
-  assert.equal(imported.filter((place) => place.geometryType === 'POINT').length, 16);
-  assert.equal(imported.filter((place) => place.geometryType === 'SEGMENT').length, 8);
+  assert.equal(imported.length, 309);
+  assert.equal(new Set(imported.map((place) => place.id)).size, 309);
+  assert.equal(imported.filter((place) => place.geometryType === 'POINT').length, 306);
+  assert.equal(imported.filter((place) => place.geometryType === 'SEGMENT').length, 3);
   assert.ok(imported.every((place) => place.creatorId === null));
 });
 
