@@ -35,8 +35,8 @@ export function MyPagePage() {
             <div className="archive-section-heading"><h2>이웃 목록</h2><span>{data.neighbors.count}명</span></div>
             {data.neighbors.preview.length ? <div className="neighbor-list">{data.neighbors.preview.map((neighbor) => <div className="neighbor-list__item" key={neighbor.id}>{neighbor.profileImageUrl ? <img src={neighbor.profileImageUrl} alt="" /> : <span aria-hidden="true" /> }<strong>{neighbor.username}</strong></div>)}</div> : <p>아직 이웃이 없어요.</p>}
           </section>
-          <GardenView garden={data.garden} />
         </> : null}
+        <GardenView garden={data?.garden ?? null} isLoading={!data && !error} />
       </main>
     </AppShell>
   );

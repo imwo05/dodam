@@ -49,7 +49,7 @@ export function InitialSchedulePage() {
         <section className="initial-schedule-list" aria-live="polite">
           {loading && !selectedSchedules.length ? <p className="schedule-empty">일정을 불러오는 중이에요.</p> : null}
           {!loading && !selectedSchedules.length ? <p className="schedule-empty">등록된 일정이 없어요.<br />아래에서 평소 일정을 추가해 주세요.</p> : null}
-          {selectedSchedules.map((schedule) => <ScheduleChip key={schedule.id} schedule={schedule} onClick={() => { setFormOpen(false); navigate(`/schedule/${schedule.id}/edit`, { state: { schedule } }); }} />)}
+          {selectedSchedules.map((schedule) => <ScheduleChip key={schedule.id} schedule={schedule} onClick={() => { setFormOpen(false); navigate(`/schedule/${schedule.id}/edit?date=${encodeURIComponent(schedule.date)}`, { state: { schedule } }); }} />)}
           <button className="schedule-chip schedule-chip--add" type="button" onClick={() => setFormOpen(true)}>+ 일정 추가</button>
         </section>
         {error ? <p className="schedule-page__error" role="alert">{error}</p> : null}

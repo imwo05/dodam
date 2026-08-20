@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   completeOnboardingConversation,
   createOnboardingConversation,
@@ -173,6 +173,24 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
   }, [applyConversationResponse, conversationId]);
+
+  const reset = useCallback(() => {
+    createConversationPromise.current = null;
+    setConversationId(null);
+    setConversationStatus(null);
+    setProfile(emptyProfile);
+    setMessages([]);
+    setMissingSlots([]);
+    setCanComplete(false);
+    setLoading(false);
+    setError(null);
+  }, []);
+
+  useEffect(() => {
+    const handleLogout = () => reset();
+    window.addEventListener('localive:logout', handleLogout);
+    return () => window.removeEventListener('localive:logout', handleLogout);
+  }, [reset]);
 
   const value = useMemo(
     () => ({
