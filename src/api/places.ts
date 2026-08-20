@@ -41,6 +41,20 @@ function authHeaders(accessToken?: string): Record<string, string> {
   return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
 }
 
+function serializeCoordinate(value: Coordinates) {
+  return { latitude: value.lat, longitude: value.lng } satisfies BackendPlaceCoordinates;
+}
+
+function serializePlaceInput(input: PlaceWriteInput | Partial<PlaceWriteInput>) {
+  const { point, startPoint, endPoint, ...rest } = input;
+  return {
+    ...rest,
+    ...(point ? { point: serializeCoordinate(point) } : {}),
+    ...(startPoint ? { startPoint: serializeCoordinate(startPoint) } : {}),
+    ...(endPoint ? { endPoint: serializeCoordinate(endPoint) } : {})
+  };
+}
+
 function coordinate(value: BackendPlaceCoordinates | null | undefined) {
   if (!value || !Number.isFinite(Number(value.latitude)) || !Number.isFinite(Number(value.longitude))) return null;
   return { lat: Number(value.latitude), lng: Number(value.longitude) } satisfies Coordinates;
@@ -105,11 +119,11 @@ export function unsavePlace(accessToken: string, placeId: string) {
 }
 
 export function createPlace(accessToken: string, input: PlaceWriteInput) {
-  return apiRequest<BackendPlace>('/places', { method: 'POST', headers: authHeaders(accessToken), body: JSON.stringify(input) }).then((place) => getPlaceDetail(accessToken, place.id));
+  return apiRequest<BackendPlace>('/places', { method: 'POST', headers: authHeaders(accessToken), body: JSON.stringify(serializePlaceInput(input)) }).then((place) => getPlaceDetail(accessToken, place.id));
 }
 
 export function updatePlace(accessToken: string, placeId: string, input: Partial<PlaceWriteInput>) {
-  return apiRequest<BackendPlace>(`/places/${encodeURIComponent(placeId)}`, { method: 'PATCH', headers: authHeaders(accessToken), body: JSON.stringify(input) }).then((place) => getPlaceDetail(accessToken, place.id));
+  return apiRequest<BackendPlace>(`/places/${encodeURIComponent(placeId)}`, { method: 'PATCH', headers: authHeaders(accessToken), body: JSON.stringify(serializePlaceInput(input)) }).then((place) => getPlaceDetail(accessToken, place.id));
 }
 
 export function deletePlace(accessToken: string, placeId: string) {

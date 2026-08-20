@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { createJournal, createPlaceReview, createPlanBRecommendations, completePlanBStop, getPlaceDetail, getPlanBCourse, getPlanBSession, removePlanBStop, reorderPlanBStops, skipPlanBStop, startPlanB, startPlanBStop, type PlanBCategory, type PlanBCondition, type PlanBContinuityMode, type PlanBInput as ApiPlanBInput, type PlanBResponse, type PlanBStop } from '../../api/planB';
+import { createJournal, createPlaceReview, createPlanBRecommendations, completePlanBStop, getPlaceDetail, getPlanBSession, removePlanBStop, reorderPlanBStops, skipPlanBStop, startPlanB, startPlanBStop, type PlanBCategory, type PlanBCondition, type PlanBContinuityMode, type PlanBInput as ApiPlanBInput, type PlanBResponse, type PlanBStop } from '../../api/planB';
 import { getOnboardingOptions, type OnboardingOptions } from '../../api/onboarding';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePlanB, type PlanBInput as StoredPlanBInput } from '../../contexts/PlanBContext';
@@ -126,7 +126,7 @@ export function PlanBCoursePage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
-  useEffect(() => { if (!accessToken || !sessionId) return; getPlanBCourse(accessToken, sessionId).then(setSession).catch((requestErrorValue) => setError(requestError(requestErrorValue, '코스를 불러오지 못했어요.'))).finally(() => setLoading(false)); }, [accessToken, sessionId]);
+  useEffect(() => { if (!accessToken || !sessionId) return; getPlanBSession(accessToken, sessionId).then(setSession).catch((requestErrorValue) => setError(requestError(requestErrorValue, '코스를 불러오지 못했어요.'))).finally(() => setLoading(false)); }, [accessToken, sessionId]);
   async function remove(stopId: string) { if (!accessToken || !session || session.course.stops.length <= 1) return; setActionLoading(true); try { setSession(await removePlanBStop(accessToken, session.sessionId, stopId)); } catch (requestErrorValue) { setError(requestError(requestErrorValue, '장소를 삭제하지 못했어요.')); } finally { setActionLoading(false); } }
   async function move(index: number, direction: -1 | 1) { if (!accessToken || !session) return; const next = [...session.course.stops]; const target = index + direction; if (target < 0 || target >= next.length) return; [next[index], next[target]] = [next[target], next[index]]; setActionLoading(true); try { setSession(await reorderPlanBStops(accessToken, session.sessionId, next.map((stop) => stop.id))); } catch (requestErrorValue) { setError(requestError(requestErrorValue, '코스 순서를 저장하지 못했어요.')); } finally { setActionLoading(false); } }
   async function begin() { if (!accessToken || !session) return; if (session.status === 'IN_PROGRESS') { navigate(`/plan-b/${session.sessionId}/execute`); return; } setActionLoading(true); try { await startPlanB(accessToken, session.sessionId); navigate(`/plan-b/${session.sessionId}/execute`); } catch (requestErrorValue) { setError(requestError(requestErrorValue, 'Plan B를 시작하지 못했어요.')); } finally { setActionLoading(false); } }

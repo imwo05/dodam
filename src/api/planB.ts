@@ -83,6 +83,12 @@ export type PlanBResponse = {
   course: { totalMinutes: number; stops: PlanBStop[]; finalTravel: unknown };
 };
 
+export type PlanBCourse = {
+  totalMinutes: number;
+  stops: PlanBStop[];
+  finalTravel: unknown;
+};
+
 export type PlanBInput = {
   date: string;
   startTime: string;
@@ -134,6 +140,7 @@ function adaptStop(stop: BackendStop): PlanBStop {
 
 type BackendStop = Omit<PlanBStop, 'place'> & { place: BackendPlace };
 type BackendPlanBResponse = Omit<PlanBResponse, 'course'> & { course: Omit<PlanBResponse['course'], 'stops'> & { stops: BackendStop[] } };
+type BackendPlanBCourse = Omit<PlanBCourse, 'stops'> & { stops: BackendStop[] };
 
 function adaptResponse(response: BackendPlanBResponse): PlanBResponse {
   return { ...response, course: { ...response.course, stops: response.course.stops.map(adaptStop) } };
@@ -148,7 +155,7 @@ export function getPlanBSession(accessToken: string, sessionId: string) {
 }
 
 export function getPlanBCourse(accessToken: string, sessionId: string) {
-  return apiRequest<BackendPlanBResponse>(`/plan-b/${encodeURIComponent(sessionId)}/course`, { headers: authHeaders(accessToken) }).then(adaptResponse);
+  return apiRequest<BackendPlanBCourse>(`/plan-b/${encodeURIComponent(sessionId)}/course`, { headers: authHeaders(accessToken) }).then((course) => ({ ...course, stops: course.stops.map(adaptStop) }));
 }
 
 export function addPlanBStop(accessToken: string, sessionId: string, placeId: string, insertAfterStopId?: string | null) {
