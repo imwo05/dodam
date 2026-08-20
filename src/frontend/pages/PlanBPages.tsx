@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { createJournal, createPlaceReview, createPlanBRecommendations, completePlanBStop, getPlaceDetail, getPlanBSession, regeneratePlanBRecommendations, removePlanBStop, reorderPlanBStops, skipPlanBStop, startPlanB, startPlanBStop, type PlanBCategory, type PlanBCondition, type PlanBContinuityMode, type PlanBInput as ApiPlanBInput, type PlanBResponse, type PlanBStop } from '../../api/planB';
 import { getOnboardingOptions, type OnboardingOptions } from '../../api/onboarding';
 import { useAuth } from '../../contexts/AuthContext';
-import { usePlanB, type PlanBInput as StoredPlanBInput } from '../../contexts/PlanBContext';
+import { usePlanB, type PlanBInitialContext, type PlanBInput as StoredPlanBInput } from '../../contexts/PlanBContext';
 import { AppShell, PageHeader } from '../components/AppShell';
 import { MapView } from '../components/map/MapView';
 import { ScheduleTimePicker } from '../components/ScheduleTimePicker';
@@ -22,6 +22,7 @@ function labelFor(value: string, labels: Record<string, string>) { return labels
 function requestError(error: unknown, fallback: string) { return error instanceof Error ? error.message : fallback; }
 function uniquePlaceIds(placeIds: string[]) { return [...new Set(placeIds.map(String).filter(Boolean))]; }
 type PlanBRouteState = { planBEntry?: 'new' | 'continue' };
+type PlanBTab = 'MAP' | 'RECOMMEND';
 
 function newInputValues(initial: Partial<StoredPlanBInput> = {}): StoredPlanBInput {
   return {
@@ -52,23 +53,41 @@ function DamiStateCard({ session }: { session: PlanBResponse }) {
 function PageError({ message }: { message: string }) { return <p className="plan-b-error" role="alert">{message}</p>; }
 function PageLoading() { return <p className="plan-b-empty" role="status">Plan B 정보를 불러오는 중이에요.</p>; }
 
+function PlanBTabRow({ activeTab, onChange }: { activeTab: PlanBTab; onChange: (tab: PlanBTab) => void }) {
+  return (
+    <div className="plan-b-tabs" role="tablist" aria-label="Plan B 보기">
+      <button id="plan-b-map-tab" className={`plan-b-tab ${activeTab === 'MAP' ? 'is-active' : ''}`} type="button" role="tab" aria-selected={activeTab === 'MAP'} aria-controls="plan-b-map-panel" onClick={() => onChange('MAP')}>지도 탐색</button>
+      <button id="plan-b-recommend-tab" className={`plan-b-tab ${activeTab === 'RECOMMEND' ? 'is-active' : ''}`} type="button" role="tab" aria-selected={activeTab === 'RECOMMEND'} aria-controls="plan-b-recommend-panel" onClick={() => onChange('RECOMMEND')}>담이의 추천</button>
+    </div>
+  );
+}
+
+function PlanBExplorePanel({ places, loading, error, onBoundsChange, onPlaceSelect }: { places: Place[]; loading: boolean; error: string; onBoundsChange: (bounds: MapBounds) => void; onPlaceSelect: (place: Place) => void }) {
+  return <section id="plan-b-map-panel" className="plan-b-tab-panel" role="tabpanel" aria-labelledby="plan-b-map-tab"><MapView mode="EXPLORE" places={places} className="plan-b-map-boundary" ariaLabel="Plan B 장소 지도 영역" onBoundsChange={onBoundsChange} onPlaceSelect={onPlaceSelect} isLoading={loading} error={error} /><p className="plan-b-map-note">장소를 누르면 상세 정보를 확인할 수 있어요.</p></section>;
+}
+
 export function PlanBEntryPage() {
   const { accessToken } = useAuth();
   const routerLocation = useLocation();
   const { startNewPlanB } = usePlanB();
+  const [activeTab, setActiveTab] = useState<PlanBTab>('MAP');
   const [places, setPlaces] = useState<Place[]>([]);
   const [bounds, setBounds] = useState<MapBounds | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const mountedRef = useRef(true);
+  const lastMapRequestKeyRef = useRef<string | null>(null);
   const navigate = useNavigate();
+  const mapRequestKey = `${accessToken ?? 'anonymous'}:${bounds ? `${bounds.swLat},${bounds.swLng},${bounds.neLat},${bounds.neLng}` : 'initial'}`;
   useEffect(() => { startNewPlanB(); }, [routerLocation.key, startNewPlanB]);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
   useEffect(() => {
-    let active = true;
+    if (activeTab !== 'MAP' || lastMapRequestKeyRef.current === mapRequestKey) return;
+    lastMapRequestKeyRef.current = mapRequestKey;
     setLoading(true);
-    getMapPlaces(accessToken ?? undefined, bounds).then((response) => { if (active) setPlaces(response.places); }).catch((requestErrorValue) => { if (active) setError(requestError(requestErrorValue, '장소를 불러오지 못했어요.')); }).finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [accessToken, bounds]);
-  return <AppShell className="product-shell plan-b-shell" activeNav="Plan B" showBottomNav><main className="plan-b-screen plan-b-entry-screen"><PageHeader title="Plan B" backTo="/home" className="page-header--product" /><section className="plan-b-entry-copy"><p className="product-eyebrow">계획이 바뀐 순간</p><h1>오늘 가능한<br />다른 선택을 찾아볼까요?</h1><p>남은 시간과 컨디션을 알려주면 담이가 지금 할 수 있는 Plan B를 추천해요.</p></section><MapView mode="EXPLORE" places={places} className="plan-b-map-boundary" ariaLabel="Plan B 장소 지도 영역" onBoundsChange={setBounds} onPlaceSelect={(place) => navigate(`/places/${place.id}`)} isLoading={loading} error={error} /><p className="plan-b-map-note">장소를 누르면 상세 정보를 확인할 수 있어요.</p><Link className="tape-button plan-b-primary-action" to="/plan-b/input" state={{ planBEntry: 'new' }}><img src="/assets/tape-primary.png" alt="" aria-hidden="true" /><span>Plan B 시작하기</span></Link></main></AppShell>;
+    getMapPlaces(accessToken ?? undefined, bounds).then((response) => { if (mountedRef.current) setPlaces(response.places); }).catch((requestErrorValue) => { lastMapRequestKeyRef.current = null; if (mountedRef.current) setError(requestError(requestErrorValue, '장소를 불러오지 못했어요.')); }).finally(() => { if (mountedRef.current) setLoading(false); });
+  }, [accessToken, activeTab, bounds, mapRequestKey]);
+  return <AppShell className="product-shell plan-b-shell" activeNav="Plan B" showBottomNav><main className="plan-b-screen plan-b-entry-screen"><PageHeader title="Plan B" backTo="/home" className="page-header--product" /><section className="plan-b-entry-copy"><p className="product-eyebrow">계획이 바뀐 순간</p><h1>오늘 가능한<br />다른 선택을 찾아볼까요?</h1><p>남은 시간과 컨디션을 알려주면 담이가 지금 할 수 있는 Plan B를 추천해요.</p></section><PlanBTabRow activeTab={activeTab} onChange={setActiveTab} />{activeTab === 'MAP' ? <PlanBExplorePanel places={places} loading={loading} error={error} onBoundsChange={setBounds} onPlaceSelect={(place) => navigate(`/places/${place.id}`)} /> : <section id="plan-b-recommend-panel" className="plan-b-tab-panel" role="tabpanel" aria-labelledby="plan-b-recommend-tab"><PlanBRecommendationForm /></section>}</main></AppShell>;
 }
 
 function TimeField({ id, label, value, minCanonical, onChange, onOpen }: { id: string; label: string; value: string; minCanonical?: string | null; onChange: (value: string) => void; onOpen?: () => void }) {
@@ -76,20 +95,12 @@ function TimeField({ id, label, value, minCanonical, onChange, onOpen }: { id: s
   return <div className="plan-b-time-field"><span>{label}</span><button type="button" className={`plan-b-time-button ${value ? 'is-selected' : ''}`} id={id} onClick={() => { onOpen?.(); setOpen(true); }} aria-haspopup="dialog">{value ? formatTime(value) : '시간 선택'}</button>{open ? <ScheduleTimePicker value={value} onChange={onChange} onClose={() => setOpen(false)} minCanonical={minCanonical} minuteStep={5} /> : null}</div>;
 }
 
-export function PlanBInputPage() {
+function PlanBRecommendationForm({ initialContext = {}, resetOnMount = false }: { initialContext?: PlanBInitialContext; resetOnMount?: boolean }) {
   const navigate = useNavigate();
-  const routerLocation = useLocation();
   const { accessToken } = useAuth();
   const { input, setInput, startNewPlanB, recordShownPlaces } = usePlanB();
   const [options, setOptions] = useState<OnboardingOptions | null>(null);
-  const query = useMemo(() => new URLSearchParams(routerLocation.search), [routerLocation.search]);
-  const routeState = routerLocation.state as PlanBRouteState | null;
-  const continuingFlow = routeState?.planBEntry === 'continue' || query.get('flow') === 'continue';
-  const entryContext = useMemo(() => ({
-    ...(query.get('date') ? { date: query.get('date') ?? '' } : {}),
-    ...(query.get('brokenScheduleId') ? { brokenScheduleId: query.get('brokenScheduleId') } : {})
-  }), [query]);
-  const [values, setValues] = useState<StoredPlanBInput>(() => newInputValues(continuingFlow ? input : entryContext));
+  const [values, setValues] = useState<StoredPlanBInput>(() => newInputValues(Object.keys(initialContext).length ? initialContext : input));
   const [loading, setLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [error, setError] = useState('');
@@ -99,13 +110,13 @@ export function PlanBInputPage() {
 
   useEffect(() => { getOnboardingOptions().then(setOptions).catch((requestErrorValue) => setOptionsError(requestError(requestErrorValue, 'Plan B 선택지를 불러오지 못했어요.'))); }, []);
   useEffect(() => {
-    if (continuingFlow) return;
-    startNewPlanB(entryContext);
-    setValues(newInputValues(entryContext));
+    if (!resetOnMount) return;
+    startNewPlanB(initialContext);
+    setValues(newInputValues(initialContext));
     setError('');
     setTimeError('');
     setLocationMessage('');
-  }, [continuingFlow, entryContext, startNewPlanB]);
+  }, [initialContext, resetOnMount, startNewPlanB]);
   function update<K extends keyof StoredPlanBInput>(key: K, value: StoredPlanBInput[K]) { setValues((current) => ({ ...current, [key]: value })); setError(''); }
   function updateStartTime(next: string) {
     const hasEndTime = Boolean(values.endTime);
@@ -150,9 +161,6 @@ export function PlanBInputPage() {
   const conditionOptions = (options?.conditions ?? []).map((value) => ({ value, label: labelFor(value, CONDITION_LABELS) }));
   const continuityOptions = (options?.continuityModes ?? []).map((value) => ({ value, label: labelFor(value, CONTINUITY_LABELS) }));
   return (
-    <AppShell className="product-shell plan-b-shell" activeNav="Plan B" showBottomNav>
-      <main className="plan-b-screen plan-b-input-screen">
-        <PageHeader title="Plan B 입력" backTo="/plan-b" className="page-header--product" />
         <form onSubmit={submit} className="plan-b-form" noValidate>
           <p className="plan-b-section-label">오늘의 조건</p>
           <label className="plan-b-field-label" htmlFor="plan-b-date">날짜</label>
@@ -171,9 +179,20 @@ export function PlanBInputPage() {
           {timeError ? <PageError message={timeError} /> : error ? <PageError message={error} /> : null}
           <button type="submit" className="tape-button plan-b-primary-action" disabled={loading || !options}><img src="/assets/tape-primary.png" alt="" aria-hidden="true" /><span>{loading ? '추천을 만드는 중' : '추천 받아보기'}</span></button>
         </form>
-      </main>
-    </AppShell>
   );
+}
+
+export function PlanBInputPage() {
+  const routerLocation = useLocation();
+  const query = useMemo(() => new URLSearchParams(routerLocation.search), [routerLocation.search]);
+  const routeState = routerLocation.state as PlanBRouteState | null;
+  const continuingFlow = routeState?.planBEntry === 'continue' || query.get('flow') === 'continue';
+  const entryContext = useMemo(() => ({
+    ...(query.get('date') ? { date: query.get('date') ?? '' } : {}),
+    ...(query.get('brokenScheduleId') ? { brokenScheduleId: query.get('brokenScheduleId') } : {})
+  }), [query]);
+  const { input } = usePlanB();
+  return <AppShell className="product-shell plan-b-shell" activeNav="Plan B" showBottomNav><main className="plan-b-screen plan-b-input-screen"><PageHeader title="Plan B 입력" backTo="/plan-b" className="page-header--product" /><PlanBRecommendationForm initialContext={continuingFlow ? input : entryContext} resetOnMount={!continuingFlow} /></main></AppShell>;
 }
 
 function StopOption({ stop, selected, onToggle }: { stop: PlanBStop; selected: boolean; onToggle: () => void }) {

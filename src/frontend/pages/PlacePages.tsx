@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { createPlace, deletePlace, getMyPlaces, getPlaceDetail, savePlace, unsavePlace, updatePlace, type PlaceDetail, type PlaceWriteInput } from '../../api/places';
 import type { Coordinates, GeometryType, Place } from '../components/map/map.types';
@@ -32,6 +32,36 @@ function PlaceFields({ value, onChange }: { value: { name: string; address: stri
   return <div className="place-form__fields"><label>장소 이름<input required value={value.name} onChange={(event) => setField('name', event.target.value)} maxLength={100} /></label><label>주소<input required value={value.address} onChange={(event) => setField('address', event.target.value)} maxLength={255} /></label><label>활동 카테고리<select required value={value.category} onChange={(event) => setField('category', event.target.value)}><option value="">선택해 주세요</option>{CATEGORY_OPTIONS.map(([option, label]) => <option value={option} key={option}>{label}</option>)}</select></label><label>예상 시간(분)<input required type="number" min="1" max="1440" value={value.duration} onChange={(event) => setField('duration', event.target.value)} /></label><label>강도<select value={value.intensity} onChange={(event) => setField('intensity', event.target.value)}><option value="">선택 안 함</option>{INTENSITY_OPTIONS.map(([option, label]) => <option value={option} key={option}>{label}</option>)}</select></label><label>장소 설명<textarea value={value.description} onChange={(event) => setField('description', event.target.value)} maxLength={2000} /></label><label>TIP<textarea value={value.tip} onChange={(event) => setField('tip', event.target.value)} maxLength={500} /></label><label>분위기 태그<input value={value.tags} onChange={(event) => setField('tags', event.target.value)} placeholder="쉼표로 나눠 주세요" /></label></div>;
 }
 
+function RepresentativeImagePicker({ initialImageUrl }: { initialImageUrl?: string | null }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [hideExistingImage, setHideExistingImage] = useState(false);
+  const [error, setError] = useState('');
+  const displayedImage = previewUrl ?? (hideExistingImage ? null : initialImageUrl ?? null);
+
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  function selectImage(file: File | undefined) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('이미지 파일만 선택할 수 있어요.');
+      return;
+    }
+    setPreviewUrl(URL.createObjectURL(file));
+    setError('');
+    setHideExistingImage(false);
+  }
+
+  function removeImage() {
+    setPreviewUrl(null);
+    setHideExistingImage(Boolean(initialImageUrl));
+    setError('');
+    if (inputRef.current) inputRef.current.value = '';
+  }
+
+  return <section className="place-photo-field" aria-labelledby="place-representative-image-label"><div className="place-photo-field__heading"><p id="place-representative-image-label">대표 사진</p><span>선택</span></div><input ref={inputRef} className="place-photo-field__input" type="file" accept="image/*" aria-label="대표 사진 파일 선택" onChange={(event) => { selectImage(event.target.files?.[0]); event.currentTarget.value = ''; }} /><button type="button" className={`place-photo-picker ${displayedImage ? 'has-image' : ''}`} onClick={() => inputRef.current?.click()} aria-describedby="place-photo-picker-hint"><img className="place-photo-picker__surface" src="/assets/onboarding-option-surface.png" alt="" aria-hidden="true" />{displayedImage ? <img className="place-photo-picker__preview" src={displayedImage} alt="선택한 대표 사진 미리보기" /> : <span className="place-photo-picker__empty">대표 사진을 선택해 주세요</span>}<span className="place-photo-picker__action">{displayedImage ? '사진 바꾸기' : '사진 선택'}</span></button>{displayedImage ? <button type="button" className="place-photo-picker__remove" onClick={removeImage}>사진 지우기</button> : null}<p id="place-photo-picker-hint" className="place-photo-field__hint">사진은 이 화면에서만 미리 볼 수 있으며, 아직 장소에 저장되지는 않아요.</p>{error ? <p className="place-photo-field__error" role="alert">{error}</p> : null}</section>;
+}
+
 type PlaceFormValues = { name: string; address: string; category: string; duration: string; intensity: string; description: string; tip: string; tags: string };
 const emptyValues: PlaceFormValues = { name: '', address: '', category: '', duration: '30', intensity: '', description: '', tip: '', tags: '' };
 
@@ -61,7 +91,7 @@ function PlaceForm({ initial, geometryType, initialPoint, initialStart, initialE
   }
 
   const center = point ?? startPoint ?? undefined;
-  return <form className="place-form" onSubmit={(event) => void submit(event)} noValidate><p className="place-form__hint">지도에서 {geometryType === 'POINT' ? '한 곳' : '시작점과 종료점'}을 눌러 위치를 선택해 주세요.</p><MapView mode={geometryType} point={point ?? undefined} onPointChange={setPoint} startPoint={startPoint ?? undefined} endPoint={endPoint ?? undefined} onSegmentChange={(next) => { setStartPoint(next.startPoint); setEndPoint(next.endPoint); }} initialCenter={center} ariaLabel={geometryType === 'POINT' ? '장소 위치 선택 지도' : '구간 시작과 종료 위치 선택 지도'} /><div className="place-form__map-actions"><span>{geometryType === 'POINT' ? (point ? '위치 선택됨' : '위치 미선택') : (startPoint && endPoint ? '시작·종료 위치 선택됨' : startPoint ? '종료 위치를 선택해 주세요' : '시작 위치 미선택')}</span><button type="button" onClick={() => { setPoint(null); setStartPoint(null); setEndPoint(null); }}>위치 다시 선택</button></div><PlaceFields value={values} onChange={setValues} />{error ? <p className="place-form__error" role="alert">{error}</p> : null}<button type="submit" className="tape-button place-form__submit" disabled={saving}><img src="/assets/tape-primary.png" alt="" aria-hidden="true" /><span>{saving ? '저장 중' : submitLabel}</span></button></form>;
+  return <form className="place-form" onSubmit={(event) => void submit(event)} noValidate><p className="place-form__hint">지도에서 {geometryType === 'POINT' ? '한 곳' : '시작점과 종료점'}을 눌러 위치를 선택해 주세요.</p><RepresentativeImagePicker initialImageUrl={initial?.imageUrls?.[0] ?? initial?.image ?? null} /><MapView mode={geometryType} point={point ?? undefined} onPointChange={setPoint} startPoint={startPoint ?? undefined} endPoint={endPoint ?? undefined} onSegmentChange={(next) => { setStartPoint(next.startPoint); setEndPoint(next.endPoint); }} initialCenter={center} ariaLabel={geometryType === 'POINT' ? '장소 위치 선택 지도' : '구간 시작과 종료 위치 선택 지도'} /><div className="place-form__map-actions"><span>{geometryType === 'POINT' ? (point ? '위치 선택됨' : '위치 미선택') : (startPoint && endPoint ? '시작·종료 위치 선택됨' : startPoint ? '종료 위치를 선택해 주세요' : '시작 위치 미선택')}</span><button type="button" onClick={() => { setPoint(null); setStartPoint(null); setEndPoint(null); }}>위치 다시 선택</button></div><PlaceFields value={values} onChange={setValues} />{error ? <p className="place-form__error" role="alert">{error}</p> : null}<button type="submit" className="tape-button place-form__submit" disabled={saving}><img src="/assets/tape-primary.png" alt="" aria-hidden="true" /><span>{saving ? '저장 중' : submitLabel}</span></button></form>;
 }
 
 export function PlaceCreatePage() {
