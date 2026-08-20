@@ -466,10 +466,81 @@ a { color: inherit; text-decoration: none; }
 .journal-images img { width: 100%; aspect-ratio: 1; object-fit: cover; }
 .journal-delete-button { display: block; margin: 23px 0 0 auto; }
 
+/* Phase 7 places: the map stays inside the scrolling middle region so the
+   product chrome remains visible at the 375–430px mobile widths. */
+.place-shell .app-shell__scroll-region { overscroll-behavior: contain; }
+.place-explore-screen, .place-create-screen, .place-detail-screen, .my-places-screen { min-height: 0; padding: 0 22px 34px; }
+.place-explore-heading { display: flex; align-items: end; justify-content: space-between; gap: 10px; margin: 22px 0 13px; }
+.place-explore-heading h1, .place-create-intro h1, .place-detail-heading h1 { margin: 5px 0 0; color: var(--green); font-size: 22px; line-height: 30px; letter-spacing: .01em; }
+.place-text-link, .archive-inline-link { color: var(--muted); font-size: 11px; text-decoration: underline; white-space: nowrap; }
+.map-view { position: relative; width: 100%; min-height: 230px; overflow: hidden; border: 1px solid rgba(79,99,91,.22); border-radius: 14px; background: #dce4df; isolation: isolate; }
+.map-view__canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+.map-view__status { position: absolute; inset: 50% 18px auto; z-index: 2; margin: 0; color: var(--green); font-size: 12px; line-height: 18px; text-align: center; transform: translateY(-50%); }
+.map-view__status--error { color: #a40003; }
+.naver-map-marker { display: block; width: 18px; height: 18px; border: 3px solid var(--paper); border-radius: 50% 50% 50% 0; background: var(--green); box-shadow: 0 2px 5px rgba(36,54,43,.28); transform: rotate(-45deg); }
+.naver-map-marker--selected { width: 22px; height: 22px; background: #a40003; }
+.naver-map-marker--start { background: #4f635b; }
+.naver-map-marker--end { background: #b87845; }
+.naver-map-marker--place { background: #6d8e7e; }
+.place-explore-map { min-height: 330px; }
+.place-create-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.place-create-actions a, .place-save-button { display: grid; min-height: 40px; place-items: center; border: 1px solid rgba(79,99,91,.26); border-radius: 11px; color: var(--green); background: rgba(255,255,255,.44); font-size: 12px; font-weight: 700; }
+.place-explore-list { margin-top: 25px; padding-bottom: 22px; }
+.place-explore-list h2 { margin: 0 0 9px; font-size: 16px; line-height: 24px; }
+.place-explore-card { display: flex; width: 100%; min-height: 57px; align-items: center; gap: 10px; margin-top: 7px; padding: 9px 12px; border: 0; border-radius: 12px; color: var(--green); background: url('/assets/onboarding-option-surface.png') center / 100% 100% no-repeat; text-align: left; cursor: pointer; }
+.place-explore-card__marker { flex: 0 0 13px; width: 13px; height: 13px; border-radius: 50%; background: var(--green); }
+.place-explore-card span:last-child { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.place-explore-card strong { font-size: 13px; overflow-wrap: anywhere; }
+.place-explore-card small { color: var(--muted); font-size: 10px; }
+.place-create-intro { margin: 18px 0 13px; }
+.place-create-intro > p:last-child { margin: 5px 0 0; color: var(--muted) !important; font-size: 12px; line-height: 18px; }
+.place-create-map { min-height: 255px; }
+.place-create-selection { min-height: 21px; margin: 8px 2px 0; color: var(--green) !important; font-size: 11px; line-height: 18px; }
+.place-create-address-status { margin-top: 9px; padding: 10px 12px; border: 1px solid rgba(79,99,91,.14); border-radius: 10px; background: rgba(255,255,255,.37); }
+.place-create-address-status span { display: block; color: var(--muted); font-size: 10px; line-height: 15px; }
+.place-create-address-status input { width: 100%; margin-top: 4px; padding: 0; border: 0; outline: 0; color: var(--green); background: transparent; font-size: 12px; line-height: 20px; }
+.place-create-form { display: flex; flex-direction: column; gap: 13px; margin-top: 19px; padding-bottom: 4px; }
+.place-form-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; color: var(--green); font-size: 12px; font-weight: 700; }
+.place-form-field b { color: #a40003; }
+.place-form-field input, .place-form-field select, .place-form-field textarea { width: 100%; padding: 10px 12px; border: 1px solid rgba(79,99,91,.16); border-radius: 9px; outline: 0; color: var(--green); background: rgba(255,255,255,.44); font-size: 12px; font-weight: 400; line-height: 18px; }
+.place-form-field textarea { resize: vertical; }
+.place-form-field input:focus-visible, .place-form-field select:focus-visible, .place-form-field textarea:focus-visible, .place-create-address-status input:focus-visible { outline: 2px solid rgba(79,99,91,.55); outline-offset: 2px; }
+.place-form-field small { color: var(--muted); font-size: 10px; font-weight: 400; }
+.place-form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.place-image-previews { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.place-image-previews img { width: 100%; aspect-ratio: 1; border-radius: 7px; object-fit: cover; }
+.place-form-error { margin: 10px 0 0; color: #a40003 !important; font-size: 12px; line-height: 18px; }
+.place-submit { width: 100%; min-height: 58px; margin-top: 4px; color: var(--paper); background: url('/assets/tape-primary.png') center / 100% 100% no-repeat; font-size: 16px; }
+.place-submit:disabled { cursor: wait; opacity: .6; }
+.place-detail-heading { position: relative; margin: 21px 0 13px; padding-right: 84px; }
+.place-detail-heading > p:last-of-type { margin: 5px 0 0; color: var(--muted) !important; font-size: 11px; line-height: 17px; }
+.place-save-button { position: absolute; top: 24px; right: 0; width: 76px; min-height: 34px; padding: 0 6px; color: var(--paper); background: var(--green); font-size: 10px; }
+.place-save-button:disabled { opacity: .55; }
+.place-detail-map { min-height: 235px; }
+.place-detail-copy { margin-top: 19px; padding: 16px; background: url('/assets/onboarding-option-surface.png') center / 100% 100% no-repeat; }
+.place-detail-copy h2 { margin: 0; font-size: 16px; line-height: 23px; }
+.place-detail-copy h2 + p { margin: 7px 0 18px; color: var(--muted) !important; font-size: 13px; line-height: 20px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.place-detail-copy h2:nth-of-type(2) { margin-top: 15px; }
+.place-detail-meta, .place-detail-coordinates { margin: 0; color: var(--muted) !important; font-size: 11px; line-height: 18px; }
+.place-detail-coordinates p { margin: 0; color: var(--muted) !important; font-size: 11px; line-height: 18px; }
+.place-detail-images { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 14px; }
+.place-detail-images img { width: 100%; aspect-ratio: 1; border-radius: 8px; object-fit: cover; }
+.place-detail-footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 15px; padding: 0 3px 22px; color: var(--muted); font-size: 10px; }
+.place-loading, .place-empty { margin: 22px 0; color: var(--muted) !important; font-size: 13px; line-height: 20px; }
+.my-places-list { display: flex; flex-direction: column; gap: 9px; margin-top: 23px; padding-bottom: 22px; }
+.my-place-card { display: flex; min-width: 0; align-items: center; gap: 11px; padding: 11px; border-radius: 10px; color: var(--green); background: url('/assets/onboarding-option-surface.png') center / 100% 100% no-repeat; }
+.my-place-card__image { flex: 0 0 52px; width: 52px; height: 52px; overflow: hidden; border-radius: 7px; background: rgba(162,191,180,.35); }
+.my-place-card__image img { width: 100%; height: 100%; object-fit: cover; }
+.my-place-card > span:last-child { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.my-place-card strong { font-size: 14px; overflow-wrap: anywhere; }
+.my-place-card small, .my-place-card em { color: var(--muted); font-size: 10px; font-style: normal; }
+
 @media (max-width: 374px) {
   .initial-schedule-screen, .profile-complete-screen, .home-screen, .schedule-screen, .daily-schedule-screen, .schedule-edit-screen { padding-left: 22px; padding-right: 22px; }
   .schedule-form-sheet { margin-left: -22px; margin-right: -22px; }
   .calendar-scroll { margin-left: -22px; margin-right: -22px; }
+  .place-explore-screen, .place-create-screen, .place-detail-screen, .my-places-screen { padding-left: 18px; padding-right: 18px; }
+  .place-explore-map { min-height: 280px; }
 }
 
 @media (min-width: 403px) { .phone-shell { min-height: 874px; } }

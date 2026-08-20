@@ -53,10 +53,22 @@ export type BackendPlace = {
   longitude?: number | null;
   category?: string | null;
   primaryCategory?: string | null;
+  categories?: readonly string[];
   imageUrl?: string | null;
   imageUrls?: readonly string[];
   address?: string | null;
   durationMinutes?: number | null;
+  description?: string | null;
+  tip?: string | null;
+  atmosphereTags?: readonly string[];
+  intensity?: string | null;
+  geometry?: {
+    type: GeometryType;
+    point?: BackendPlaceCoordinates | null;
+    start?: BackendPlaceCoordinates | null;
+    end?: BackendPlaceCoordinates | null;
+    encodedPolyline?: string | null;
+  } | null;
 };
 
 export type MapViewMode = 'EXPLORE' | 'POINT' | 'SEGMENT';
@@ -81,5 +93,5 @@ export type MapViewProps =
       mode: 'SEGMENT';
       startPoint?: Coordinates;
       endPoint?: Coordinates;
-      onSegmentChange?: (value: { startPoint: Coordinates; endPoint: Coordinates }) => void;
+      onSegmentChange?: (value: { startPoint: Coordinates; endPoint?: Coordinates }) => void;
     });

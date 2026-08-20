@@ -31,6 +31,13 @@ export function createSupabaseRestClient({ url, serviceRoleKey, fetchImpl = fetc
         headers: { Prefer: 'return=representation' }
       });
     },
+    async delete(table, query) {
+      return request(table, {
+        method: 'DELETE',
+        query,
+        headers: { Prefer: 'return=representation' }
+      });
+    },
     async upsert(table, row, onConflict) {
       return request(table, {
         method: 'POST',

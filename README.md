@@ -48,7 +48,7 @@ Node 20 이상 필요. 별도 설치 패키지 없음.
 - **Plan B** — 상황(컨디션·계획유지수준) 기반 장소 추천 + 코스 구성 + 진행
 - **Review / Journal** — 공개 후기, 개인 경험 기록(+캘린더)
 - **Archive / My Page** — 방문 통계·활동 기록, 이웃, 다람쥐의 정원
-- **Geo / Upload** — 주소 검색·역지오코딩, 이미지 업로드 (데모 스텁)
+- **Geo / Upload** — NAVER 서버 역지오코딩, Supabase Storage signed upload
 
 전체 엔드포인트 규격은 API 명세서를 참고.
 
@@ -64,3 +64,11 @@ Node 20 이상 필요. 별도 설치 패키지 없음.
 인증이 필요한 요청은 헤더에 `Authorization: Bearer {accessToken}`.
 
 > ⚠️ `.env`, `ai-service/.env` 는 절대 커밋하지 말 것 (OpenAI 키 포함). `.gitignore` 에 등록되어 있음.
+
+### Phase 7 Place configuration
+
+`VITE_NAVER_MAP_CLIENT_ID` is the browser-only NAVER Maps Web SDK client ID.
+`NAVER_MAPS_CLIENT_ID`, `NAVER_MAPS_CLIENT_SECRET`, and the Search credentials
+are backend-only. Place images use the place-images Supabase Storage bucket:
+the backend issues a short-lived signed upload URL and only the resulting
+public object URL is persisted on the Place row.

@@ -1,7 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { AppShell } from './components/AppShell';
-import { PlaceholderPage } from './pages/PlaceholderPage';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
 import { StartPage } from './pages/StartPage';
@@ -19,6 +17,10 @@ import { MyActivityPage } from './pages/MyActivityPage';
 import { ReviewManagementPage } from './pages/ReviewManagementPage';
 import { JournalDetailPage } from './pages/JournalDetailPage';
 import { MyPagePage } from './pages/MyPagePage';
+import { PlaceCreatePage } from './pages/PlaceCreatePage';
+import { PlaceDetailPage } from './pages/PlaceDetailPage';
+import { PlaceExplorePage } from './pages/PlaceExplorePage';
+import { MyPlacesPage } from './pages/MyPlacesPage';
 import { useAuth } from '../contexts/AuthContext';
 
 function RouteLoading() {
@@ -57,9 +59,14 @@ export function App() {
       <Route path="/schedule/daily" element={<AuthenticatedRoute><DailySchedulePage /></AuthenticatedRoute>} />
       <Route path="/schedule/new" element={<AuthenticatedRoute><ScheduleEditPage /></AuthenticatedRoute>} />
       <Route path="/schedule/:id/edit" element={<AuthenticatedRoute><ScheduleEditPage /></AuthenticatedRoute>} />
-      <Route path="/plan-b" element={<AppShell activeNav="Plan B" showBottomNav><PlaceholderPage title="Plan B" /></AppShell>} />
+      <Route path="/plan-b" element={<AuthenticatedRoute><PlaceExplorePage /></AuthenticatedRoute>} />
+      <Route path="/places/map" element={<AuthenticatedRoute><PlaceExplorePage /></AuthenticatedRoute>} />
+      <Route path="/places/create/point" element={<AuthenticatedRoute><PlaceCreatePage mode="POINT" /></AuthenticatedRoute>} />
+      <Route path="/places/create/segment" element={<AuthenticatedRoute><PlaceCreatePage mode="SEGMENT" /></AuthenticatedRoute>} />
+      <Route path="/places/:placeId" element={<AuthenticatedRoute><PlaceDetailPage /></AuthenticatedRoute>} />
       <Route path="/archive" element={<AuthenticatedRoute><ArchivePage /></AuthenticatedRoute>} />
       <Route path="/archive/saved-places" element={<AuthenticatedRoute><SavedPlacesPage /></AuthenticatedRoute>} />
+      <Route path="/archive/my-places" element={<AuthenticatedRoute><MyPlacesPage /></AuthenticatedRoute>} />
       <Route path="/archive/activities" element={<AuthenticatedRoute><MyActivityPage /></AuthenticatedRoute>} />
       <Route path="/archive/manage" element={<AuthenticatedRoute><ReviewManagementPage /></AuthenticatedRoute>} />
       <Route path="/archive/journal/:journalId" element={<AuthenticatedRoute><JournalDetailPage /></AuthenticatedRoute>} />

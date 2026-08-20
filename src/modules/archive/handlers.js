@@ -14,11 +14,11 @@ export async function getArchive(context) {
         visitedPlaceCount: store.countVisitedPlaces(user.id),
         completedPlanBCount: store.countCompletedPlanB(user.id),
         activityCount: activities.length,
-        createdPlaceCount: store.countCreatedPlaces(user.id),
+        createdPlaceCount: (await context.repositories.place.getByCreator(user.id)).length,
         reviewCount: store.countReviewsByUser(user.id)
       },
       recentActivities: activities.slice(0, 5).map(serializeActivity),
-      savedPlacePreview: store.listSavedPlaces(user.id).slice(0, 3).map((p) => ({
+      savedPlacePreview: (await context.repositories.place.getSavedPlaces(user.id)).slice(0, 3).map((p) => ({
         id: p.id,
         name: p.name,
         imageUrl: p.imageUrls?.[0] ?? null

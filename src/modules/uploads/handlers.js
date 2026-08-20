@@ -1,29 +1,37 @@
-// 이미지 업로드 presigned URL 발급 스텁.
-// 실제로는 S3/GCS presigned URL을 발급. 데모에선 가짜 URL을 돌려준다.
+import { randomUUID } from 'node:crypto';
 import { ApiError } from '../../lib/errors.js';
-import { createTokenId } from '../../lib/security.js';
 import { requireAuth } from '../auth/service.js';
 
-const TYPES = new Set(['PLACE', 'JOURNAL', 'PROFILE']);
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 export async function createPresignedUrl(context) {
-  requireAuth(context);
-  const { fileName, contentType, type } = context.body;
-  if (!fileName || !contentType) {
-    throw new ApiError(422, 'VALIDATION_ERROR', 'fileName, contentType이 필요합니다.');
+  const user = requireAuth(context);
+  const input = context.body && typeof context.body === 'object' ? context.body : {};
+  const uploadType = String(input.type ?? 'PLACE').toUpperCase();
+  const fileName = String(input.fileName ?? '').trim();
+  const contentType = String(input.contentType ?? '').toLowerCase();
+  const size = input.size == null ? null : Number(input.size);
+
+  if (uploadType !== 'PLACE') throw new ApiError(422, 'VALIDATION_ERROR', 'type은 PLACE만 지원합니다.');
+  if (!fileName || fileName.length > 255) throw new ApiError(422, 'VALIDATION_ERROR', 'fileName이 필요합니다.');
+  if (!IMAGE_TYPES.has(contentType)) throw new ApiError(422, 'VALIDATION_ERROR', '지원하지 않는 이미지 형식입니다.');
+  if (size != null && (!Number.isFinite(size) || size <= 0 || size > MAX_IMAGE_BYTES)) {
+    throw new ApiError(422, 'VALIDATION_ERROR', '이미지 크기는 10MB 이하여야 합니다.');
   }
-  const uploadType = String(type ?? 'PLACE').toUpperCase();
-  if (!TYPES.has(uploadType)) {
-    throw new ApiError(422, 'VALIDATION_ERROR', 'type은 PLACE, JOURNAL, PROFILE 중 하나여야 합니다.');
+  if (!context.storageClient) {
+    throw new ApiError(503, 'STORAGE_NOT_CONFIGURED', '이미지 저장소가 아직 연결되지 않았습니다.');
   }
 
-  const key = `${uploadType.toLowerCase()}/${createTokenId()}-${fileName}`;
-  // 데모용 mock. 실제 배포 시 S3 presigned PUT URL로 교체.
+  const extension = contentType.split('/')[1].replace('jpeg', 'jpg');
+  const path = 'places/' + user.id + '/' + randomUUID() + '.' + extension;
+  const signed = await context.storageClient.createSignedUploadUrl(path, contentType);
+
   return {
     data: {
-      uploadUrl: `https://mock-uploads.dodam.app/put/${key}`,
-      fileUrl: `https://cdn.dodam.app/${key}`,
-      key,
+      uploadUrl: signed.uploadUrl,
+      fileUrl: signed.fileUrl,
+      path: signed.path,
       method: 'PUT',
       headers: { 'Content-Type': contentType }
     }

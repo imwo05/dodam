@@ -35,16 +35,18 @@ export function createRepositories({
       adapterName: 'supabase',
       profile: createSupabaseProfileRepository(client),
       onboarding: createSupabaseOnboardingRepository(client),
-      user: createSupabaseUserRepository({ client, store })
+      user: createSupabaseUserRepository({ client, store }),
+      place: createSupabasePlaceRepository(client)
     };
   }
 
-  logger.warn?.('[persistence] adapter=in-memory; set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY for persistent onboarding data.');
+  logger.warn?.('[persistence] adapter=in-memory; set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY for persistent Place and onboarding data.');
   return {
     adapterName: 'in-memory',
     profile: createInMemoryProfileRepository(store),
     onboarding: createInMemoryOnboardingRepository(store),
-    user: createInMemoryUserRepository(store)
+    user: createInMemoryUserRepository(store),
+    place: createInMemoryPlaceRepository(store)
   };
 }
 
@@ -84,6 +86,68 @@ export function createInMemoryUserRepository(store) {
   return {
     async setOnboardingCompleted(userId, completed = true) {
       return store.updateUser(userId, { onboardingCompleted: Boolean(completed) });
+    }
+  };
+}
+
+export function createInMemoryPlaceRepository(store) {
+  return {
+    async getById(id, { includeInactive = false } = {}) {
+      const place = store.findPlaceById(id);
+      return place && (includeInactive || (place.status ?? 'ACTIVE') === 'ACTIVE') ? place : null;
+    },
+    async list(filters = {}) {
+      let places = store.listPlaces({
+        creatorId: filters.creatorId,
+        category: filters.category,
+        keyword: filters.keyword,
+        bbox: filters.bbox,
+        maxDurationMinutes: filters.maxDurationMinutes
+      });
+      if (!filters.includeInactive) places = places.filter((place) => (place.status ?? 'ACTIVE') === 'ACTIVE');
+      if (filters.ids) {
+        const ids = new Set(filters.ids.map(String));
+        places = places.filter((place) => ids.has(place.id));
+      }
+      return places;
+    },
+    async search(keyword, options = {}) {
+      return this.list({ ...options, keyword });
+    },
+    async getInBounds(bounds, options = {}) {
+      return this.list({ ...options, bbox: bounds });
+    },
+    async create(input) {
+      return store.createPlace(input);
+    },
+    async update(id, patch) {
+      return store.updatePlace(id, { ...patch, updatedAt: new Date().toISOString() });
+    },
+    async delete(id) {
+      return store.deletePlace(id);
+    },
+    async getByCreator(creatorId, options = {}) {
+      return this.list({ ...options, creatorId });
+    },
+    async savePlace(userId, placeId) {
+      store.savePlace(userId, placeId);
+      return { userId: String(userId), placeId: String(placeId) };
+    },
+    async unsavePlace(userId, placeId) {
+      store.unsavePlace(userId, placeId);
+      return true;
+    },
+    async isSaved(userId, placeId) {
+      return store.isPlaceSaved(userId, placeId);
+    },
+    async getSavedPlaces(userId) {
+      return store.listSavedPlaces(userId);
+    },
+    async upsertSeed(place) {
+      const existing = store.findPlaceBySourceId?.(place.sourceId)
+        ?? store.listPlaces({ includeInactive: true }).find((item) => item.sourceId === place.sourceId);
+      if (existing) return store.updatePlace(existing.id, place);
+      return store.createPlace(place);
     }
   };
 }
@@ -264,4 +328,286 @@ function toConversationPatch(patch) {
 
 function makePersistentId(prefix) {
   return `${prefix}_${randomUUID()}`;
+}
+
+export function createSupabasePlaceRepository(client) {
+  return {
+    async getById(id, { includeInactive = false } = {}) {
+      const query = { id: `eq.${String(id)}`, limit: '1' };
+      if (!includeInactive) query.status = 'eq.ACTIVE';
+      const rows = await client.select('places', query);
+      return rows[0] ? fromPlaceRow(rows[0]) : null;
+    },
+    async list(filters = {}) {
+      const query = {};
+      if (!filters.includeInactive) query.status = 'eq.ACTIVE';
+      if (filters.creatorId != null) query.creator_id = `eq.${String(filters.creatorId)}`;
+      if (filters.category) query.activity_type = `eq.${String(filters.category)}`;
+      if (filters.geometryType) query.geometry_type = `eq.${String(filters.geometryType)}`;
+      const rows = await client.select('places', query);
+      let places = rows.map(fromPlaceRow);
+      if (filters.ids) {
+        const ids = new Set(filters.ids.map(String));
+        places = places.filter((place) => ids.has(place.id));
+      }
+      if (filters.keyword) places = filterKeyword(places, filters.keyword);
+      if (filters.maxDurationMinutes != null) {
+        places = places.filter((place) => place.durationMinutes == null || place.durationMinutes <= Number(filters.maxDurationMinutes));
+      }
+      if (filters.bbox) places = places.filter((place) => geometryIntersectsBounds(place, filters.bbox));
+      return places.sort(sortPlaces);
+    },
+    async search(keyword, options = {}) {
+      return this.list({ ...options, keyword });
+    },
+    async getInBounds(bounds, options = {}) {
+      return this.list({ ...options, bbox: bounds });
+    },
+    async create(input) {
+      const row = toPlaceRow({
+        ...input,
+        id: input.id ?? makePersistentId('plc'),
+        source: input.source ?? 'USER',
+        status: input.status ?? 'ACTIVE'
+      });
+      const rows = await client.insert('places', row);
+      return fromPlaceRow(rows[0] ?? row);
+    },
+    async update(id, patch) {
+      const rows = await client.update('places', { id: `eq.${String(id)}` }, toPlacePatch(patch));
+      return rows[0] ? fromPlaceRow(rows[0]) : null;
+    },
+    async delete(id) {
+      const rows = await client.update(
+        'places',
+        { id: `eq.${String(id)}` },
+        { status: 'DELETED', updated_at: new Date().toISOString() }
+      );
+      return rows[0] ? fromPlaceRow(rows[0]) : null;
+    },
+    async getByCreator(creatorId, options = {}) {
+      return this.list({ ...options, creatorId });
+    },
+    async savePlace(userId, placeId) {
+      const rows = await client.upsert(
+        'saved_places',
+        { user_id: String(userId), place_id: String(placeId) },
+        'user_id,place_id'
+      );
+      return rows[0] ?? { userId: String(userId), placeId: String(placeId) };
+    },
+    async unsavePlace(userId, placeId) {
+      await client.delete('saved_places', {
+        user_id: `eq.${String(userId)}`,
+        place_id: `eq.${String(placeId)}`
+      });
+      return true;
+    },
+    async isSaved(userId, placeId) {
+      const rows = await client.select('saved_places', {
+        user_id: `eq.${String(userId)}`,
+        place_id: `eq.${String(placeId)}`,
+        limit: '1'
+      });
+      return Boolean(rows[0]);
+    },
+    async getSavedPlaces(userId) {
+      const saved = await client.select('saved_places', {
+        user_id: `eq.${String(userId)}`,
+        order: 'created_at.desc'
+      });
+      if (!saved.length) return [];
+      const places = await this.list({ ids: saved.map((row) => row.place_id) });
+      const byId = new Map(places.map((place) => [place.id, place]));
+      return saved.map((row) => byId.get(row.place_id)).filter(Boolean);
+    },
+    async upsertSeed(place) {
+      const row = toPlaceRow({
+        ...place,
+        source: 'SEED',
+        status: place.status ?? 'ACTIVE'
+      });
+      const rows = await client.upsert('places', row, 'source_id');
+      return fromPlaceRow(rows[0] ?? row);
+    }
+  };
+}
+
+function toPlaceRow(place) {
+  const now = new Date().toISOString();
+  return {
+    id: String(place.id),
+    source_id: place.sourceId ?? null,
+    creator_id: place.creatorId ?? null,
+    name: place.name,
+    description: place.description ?? '',
+    tip: place.tip ?? null,
+    address: place.address ?? '',
+    district: place.district ?? null,
+    geometry_type: place.geometryType ?? 'POINT',
+    latitude: place.geometryType === 'SEGMENT' ? null : numberOrNull(place.latitude ?? place.pointLatitude),
+    longitude: place.geometryType === 'SEGMENT' ? null : numberOrNull(place.longitude ?? place.pointLongitude),
+    start_latitude: numberOrNull(place.startLatitude),
+    start_longitude: numberOrNull(place.startLongitude),
+    end_latitude: numberOrNull(place.endLatitude),
+    end_longitude: numberOrNull(place.endLongitude),
+    encoded_polyline: place.encodedPolyline ?? null,
+    distance_meters: numberOrNull(place.distanceMeters),
+    duration_minutes: integerOrNull(place.durationMinutes),
+    activity_type: place.activityType ?? place.primaryCategory ?? null,
+    experience_categories: [...(place.experienceCategories ?? [])],
+    source_wellness_type: place.sourceWellnessType ?? place.wellnessType ?? null,
+    atmosphere_tags: [...(place.atmosphereTags ?? place.tags ?? [])],
+    intensity: place.intensity ?? null,
+    indoor_outdoor: place.indoorOutdoor ?? null,
+    recommended_time_bands: [...(place.recommendedTimeBands ?? [])],
+    solo_friendly: place.soloFriendly ?? null,
+    price_level: place.priceLevel ?? null,
+    image_urls: [...(place.imageUrls ?? [])],
+    status: place.status ?? 'ACTIVE',
+    source: place.source ?? 'USER',
+    source_metadata: place.sourceMetadata ?? {},
+    created_at: place.createdAt ?? now,
+    updated_at: place.updatedAt ?? now
+  };
+}
+
+function toPlacePatch(patch) {
+  const mapping = {
+    creatorId: 'creator_id',
+    name: 'name',
+    description: 'description',
+    tip: 'tip',
+    address: 'address',
+    district: 'district',
+    geometryType: 'geometry_type',
+    latitude: 'latitude',
+    longitude: 'longitude',
+    pointLatitude: 'latitude',
+    pointLongitude: 'longitude',
+    startLatitude: 'start_latitude',
+    startLongitude: 'start_longitude',
+    endLatitude: 'end_latitude',
+    endLongitude: 'end_longitude',
+    encodedPolyline: 'encoded_polyline',
+    distanceMeters: 'distance_meters',
+    durationMinutes: 'duration_minutes',
+    activityType: 'activity_type',
+    primaryCategory: 'activity_type',
+    experienceCategories: 'experience_categories',
+    sourceWellnessType: 'source_wellness_type',
+    wellnessType: 'source_wellness_type',
+    atmosphereTags: 'atmosphere_tags',
+    tags: 'atmosphere_tags',
+    intensity: 'intensity',
+    indoorOutdoor: 'indoor_outdoor',
+    recommendedTimeBands: 'recommended_time_bands',
+    soloFriendly: 'solo_friendly',
+    priceLevel: 'price_level',
+    imageUrls: 'image_urls',
+    status: 'status',
+    sourceMetadata: 'source_metadata'
+  };
+  const row = {};
+  for (const [key, column] of Object.entries(mapping)) {
+    if (patch[key] !== undefined) row[column] = patch[key];
+  }
+  row.updated_at = new Date().toISOString();
+  return row;
+}
+
+function fromPlaceRow(row) {
+  const geometryType = row.geometry_type ?? 'POINT';
+  const atmosphereTags = [...(row.atmosphere_tags ?? [])];
+  return {
+    id: row.id,
+    sourceId: row.source_id ?? null,
+    creatorId: row.creator_id ?? null,
+    name: row.name,
+    description: row.description ?? '',
+    tip: row.tip ?? null,
+    address: row.address ?? '',
+    district: row.district ?? null,
+    geometryType,
+    latitude: row.latitude ?? null,
+    longitude: row.longitude ?? null,
+    pointLatitude: row.latitude ?? null,
+    pointLongitude: row.longitude ?? null,
+    startLatitude: row.start_latitude ?? null,
+    startLongitude: row.start_longitude ?? null,
+    endLatitude: row.end_latitude ?? null,
+    endLongitude: row.end_longitude ?? null,
+    encodedPolyline: row.encoded_polyline ?? null,
+    distanceMeters: row.distance_meters ?? null,
+    durationMinutes: row.duration_minutes ?? null,
+    activityType: row.activity_type ?? null,
+    primaryCategory: row.activity_type ?? null,
+    experienceCategories: [...(row.experience_categories ?? [])],
+    sourceWellnessType: row.source_wellness_type ?? null,
+    wellnessType: row.source_wellness_type ?? null,
+    atmosphereTags,
+    moodTags: atmosphereTags,
+    tags: atmosphereTags,
+    intensity: row.intensity ?? null,
+    indoorOutdoor: row.indoor_outdoor ?? null,
+    recommendedTimeBands: [...(row.recommended_time_bands ?? [])],
+    soloFriendly: row.solo_friendly ?? null,
+    priceLevel: row.price_level ?? null,
+    imageUrls: [...(row.image_urls ?? [])],
+    status: row.status ?? 'ACTIVE',
+    source: row.source ?? 'USER',
+    sourceMetadata: row.source_metadata ?? {},
+    createdAt: row.created_at ?? null,
+    updatedAt: row.updated_at ?? null
+  };
+}
+
+function filterKeyword(places, keyword) {
+  const normalized = String(keyword).toLocaleLowerCase();
+  return places.filter((place) => [
+    place.name,
+    place.address,
+    place.description,
+    place.district,
+    place.sourceWellnessType,
+    ...(place.atmosphereTags ?? [])
+  ].filter(Boolean).some((value) => String(value).toLocaleLowerCase().includes(normalized)));
+}
+
+function geometryIntersectsBounds(place, bounds) {
+  const swLat = Number(bounds.swLat);
+  const swLng = Number(bounds.swLng);
+  const neLat = Number(bounds.neLat);
+  const neLng = Number(bounds.neLng);
+  if (![swLat, swLng, neLat, neLng].every(Number.isFinite)) return false;
+  if (place.geometryType !== 'SEGMENT') {
+    return inBounds(place.latitude, place.longitude, swLat, swLng, neLat, neLng);
+  }
+  const minLat = Math.min(place.startLatitude, place.endLatitude);
+  const maxLat = Math.max(place.startLatitude, place.endLatitude);
+  const minLng = Math.min(place.startLongitude, place.endLongitude);
+  const maxLng = Math.max(place.startLongitude, place.endLongitude);
+  return minLat <= neLat && maxLat >= swLat && minLng <= neLng && maxLng >= swLng;
+}
+
+function inBounds(latitude, longitude, swLat, swLng, neLat, neLng) {
+  return latitude != null && longitude != null
+    && latitude >= swLat && latitude <= neLat
+    && longitude >= swLng && longitude <= neLng;
+}
+
+function sortPlaces(a, b) {
+  return String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')) || a.id.localeCompare(b.id);
+}
+
+function numberOrNull(value) {
+  if (value == null || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function integerOrNull(value) {
+  if (value == null || value === '') return null;
+  const number = Number(value);
+  return Number.isInteger(number) ? number : null;
 }

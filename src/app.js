@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { createStore } from './data/store.js';
 import { createRepositories } from './data/repositories/index.js';
+import { createSupabaseStorageClient } from './data/supabase/storage.js';
 import { ApiError } from './lib/errors.js';
 import { parseJsonBody, sendError, sendNoContent, sendSuccess } from './lib/http.js';
 import { buildAuthService } from './modules/auth/service.js';
@@ -59,6 +60,7 @@ import {
   getScheduleRecommendations
 } from './modules/places/handlers.js';
 import { searchAddresses, reverseGeocode } from './modules/geo/handlers.js';
+import { buildNaverGeoClient } from './modules/geo/naver.js';
 import {
   createRecommendations,
   getSession,
@@ -218,6 +220,12 @@ export function createRequestHandler(options = {}) {
     fetchImpl: options.fetchImpl,
     adapter: options.persistenceAdapter
   });
+  const storageClient = options.storageClient ?? createSupabaseStorageClient({
+    url: options.supabaseUrl ?? process.env.SUPABASE_URL,
+    serviceRoleKey: options.supabaseServiceRoleKey ?? process.env.SUPABASE_SERVICE_ROLE_KEY,
+    bucket: options.storageBucket ?? process.env.SUPABASE_STORAGE_BUCKET,
+    fetchImpl: options.fetchImpl
+  });
   const auth = buildAuthService({
     store,
     jwtSecret: options.jwtSecret ?? process.env.JWT_SECRET ?? 'dodam-dev-secret',
@@ -236,6 +244,7 @@ export function createRequestHandler(options = {}) {
       apiKey: options.aiApiKey ?? process.env.AI_RECOMMENDATION_API_KEY,
       fetchImpl: options.fetchImpl
     });
+  const naverGeoClient = options.naverGeoClient ?? buildNaverGeoClient({ fetchImpl: options.fetchImpl });
 
   const handleRequest = async function handleRequest(req, res) {
     try {
@@ -262,7 +271,9 @@ export function createRequestHandler(options = {}) {
         store,
         repositories,
         auth,
-        aiClient
+        aiClient,
+        naverGeoClient,
+        storageClient
       };
 
       const result = await route.handler(context);
