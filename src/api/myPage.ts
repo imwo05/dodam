@@ -1,10 +1,11 @@
 import { apiRequest } from './client';
+import type { GardenData } from './garden';
 
 export type MyPageResponse = {
   user: { id: string; username: string; profileImageUrl: string | null };
   selfCareProfile: { summary: string | null } | null;
   neighbors: { count: number; preview: Array<{ id: string; username: string; profileImageUrl: string | null }> };
-  garden: unknown;
+  garden: GardenData;
 };
 
 function authHeaders(accessToken: string) {
