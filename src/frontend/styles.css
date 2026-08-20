@@ -601,6 +601,43 @@ a { color: inherit; text-decoration: none; }
 .plan-b-photo-boundary small { color: var(--muted); font-size: 10px; line-height: 16px; }
 .plan-b-photo-boundary img { width: 90px; height: 90px; object-fit: cover; }
 
+.map-view { position: relative; width: 100%; min-height: 220px; overflow: hidden; background: rgba(162,191,180,.2); }
+.map-view__status { position: absolute; z-index: 4; top: 50%; left: 50%; max-width: calc(100% - 24px); padding: 7px 11px; color: var(--muted); background: rgba(244,241,236,.86); font-size: 11px; line-height: 16px; text-align: center; transform: translate(-50%, -50%); white-space: normal; }
+.map-view__status--error { color: #a40003; }
+.plan-b-map-boundary { min-height: 220px; margin-top: 24px; border: 1px solid rgba(79,99,91,.22); }
+.plan-b-map-note { margin: 8px 7px 0; color: var(--muted) !important; font-size: 11px; line-height: 17px; }
+.schedule-plan-b-link { display: block; margin: 20px 28px 0; color: var(--muted); font-size: 12px; text-align: center; text-decoration: underline; }
+.place-create-screen, .place-detail-screen { min-height: 1040px; padding: 0 26px 54px; color: var(--green); overflow-wrap: anywhere; }
+.place-form { padding-top: 23px; }
+.place-form__hint { margin: 0 0 10px; color: var(--muted); font-size: 12px; line-height: 18px; }
+.place-form .map-view { min-height: 245px; border: 1px solid rgba(79,99,91,.18); }
+.place-form__map-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; color: var(--muted); font-size: 11px; }
+.place-form__map-actions button { padding: 4px 8px; border: 1px solid rgba(79,99,91,.3); color: var(--green); background: transparent; font-size: 11px; }
+.place-form__fields { display: grid; gap: 12px; margin-top: 24px; }
+.place-form__fields label { display: grid; gap: 6px; color: var(--green); font-size: 12px; font-weight: 700; }
+.place-form__fields input, .place-form__fields select, .place-form__fields textarea { width: 100%; min-height: 42px; padding: 9px 12px; border: 0; outline: 0; color: var(--green); background: url('/assets/onboarding-option-surface.png') center / 100% 100% no-repeat; font-size: 13px; font-weight: 400; }
+.place-form__fields textarea { min-height: 78px; resize: vertical; line-height: 18px; }
+.place-form__fields input:focus-visible, .place-form__fields select:focus-visible, .place-form__fields textarea:focus-visible { outline: 2px solid rgba(79,99,91,.55); outline-offset: 2px; }
+.place-form__error { margin: 14px 0 0; color: #a40003; font-size: 12px; line-height: 18px; }
+.place-form__submit { width: 100%; margin-top: 25px; }
+.place-create-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.place-create-links a { padding: 8px 10px; color: var(--green); background: url('/assets/onboarding-option-surface.png') center / 100% 100% no-repeat; font-size: 12px; }
+.place-detail-screen > .map-view { min-height: 245px; margin-top: 19px; }
+.place-detail-copy { margin-top: 20px; }
+.place-detail-copy h1 { margin: 5px 0 0; color: var(--green); font-size: 24px; line-height: 32px; }
+.place-detail-copy > p:not(.product-eyebrow) { margin: 7px 0 0; color: var(--muted); font-size: 13px; line-height: 20px; }
+.place-detail-meta { display: flex; flex-wrap: wrap; gap: 7px 13px; margin-top: 11px; color: var(--green); font-size: 12px; }
+.place-detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.place-detail-actions button, .place-detail-actions a { min-height: 35px; padding: 7px 11px; border: 1px solid rgba(79,99,91,.34); color: var(--green); background: rgba(244,241,236,.28); font-size: 11px; }
+.place-reviews { margin-top: 25px; }
+.place-reviews h2 { margin: 0; font-size: 17px; line-height: 24px; }
+.place-reviews article { margin-top: 8px; padding: 11px 13px; background: url('/assets/onboarding-option-surface.png') center / 100% 100% no-repeat; }
+.place-reviews article p, .place-reviews > p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 18px; }
+
+@media (max-width: 374px) {
+  .place-create-screen, .place-detail-screen { padding-right: 22px; padding-left: 22px; }
+}
+
 @media (max-width: 374px) {
   .plan-b-screen { padding-right: 22px; padding-left: 22px; }
   .plan-b-screen .page-header--product { margin-right: -22px; margin-left: -22px; width: calc(100% + 44px); }

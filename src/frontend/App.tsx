@@ -19,6 +19,7 @@ import { JournalDetailPage } from './pages/JournalDetailPage';
 import { MyPagePage } from './pages/MyPagePage';
 import { useAuth } from '../contexts/AuthContext';
 import { PlanBEntryPage, PlanBExecutionPage, PlanBInputPage, PlanBJournalPage, PlanBRecommendationsPage, PlanBReviewPage, PlanBCoursePage } from './pages/PlanBPages';
+import { MyPlacesPage, PlaceCreatePage, PlaceDetailPage, PlaceEditPage } from './pages/PlacePages';
 
 function RouteLoading() {
   return <div className="route-loading" role="status" aria-live="polite">인증 정보를 확인하고 있어요.</div>;
@@ -63,8 +64,12 @@ export function App() {
       <Route path="/plan-b/:sessionId/execute" element={<AuthenticatedRoute><PlanBExecutionPage /></AuthenticatedRoute>} />
       <Route path="/plan-b/:sessionId/review" element={<AuthenticatedRoute><PlanBReviewPage /></AuthenticatedRoute>} />
       <Route path="/plan-b/:sessionId/journal" element={<AuthenticatedRoute><PlanBJournalPage /></AuthenticatedRoute>} />
+      <Route path="/places/new/:geometry" element={<AuthenticatedRoute><PlaceCreatePage /></AuthenticatedRoute>} />
+      <Route path="/places/:placeId/edit" element={<AuthenticatedRoute><PlaceEditPage /></AuthenticatedRoute>} />
+      <Route path="/places/:placeId" element={<AuthenticatedRoute><PlaceDetailPage /></AuthenticatedRoute>} />
       <Route path="/archive" element={<AuthenticatedRoute><ArchivePage /></AuthenticatedRoute>} />
       <Route path="/archive/saved-places" element={<AuthenticatedRoute><SavedPlacesPage /></AuthenticatedRoute>} />
+      <Route path="/archive/places" element={<AuthenticatedRoute><MyPlacesPage /></AuthenticatedRoute>} />
       <Route path="/archive/activities" element={<AuthenticatedRoute><MyActivityPage /></AuthenticatedRoute>} />
       <Route path="/archive/manage" element={<AuthenticatedRoute><ReviewManagementPage /></AuthenticatedRoute>} />
       <Route path="/archive/journal/:journalId" element={<AuthenticatedRoute><JournalDetailPage /></AuthenticatedRoute>} />

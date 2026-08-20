@@ -10,9 +10,10 @@ export type PlanBInput = {
   condition: string;
   continuityMode: string;
   currentLocation: Coordinates | null;
+  brokenScheduleId?: string | null;
 };
 type PlanBContextValue = { input: PlanBInput; setInput: (input: PlanBInput) => void };
-const initialInput: PlanBInput = { date: '', startTime: '', endTime: '', selfCareCategory: '', customCategory: '', condition: '', continuityMode: '', currentLocation: null };
+const initialInput: PlanBInput = { date: '', startTime: '', endTime: '', selfCareCategory: '', customCategory: '', condition: '', continuityMode: '', currentLocation: null, brokenScheduleId: null };
 const PlanBContext = createContext<PlanBContextValue | null>(null);
 
 export function PlanBProvider({ children }: { children: ReactNode }) {

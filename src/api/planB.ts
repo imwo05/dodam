@@ -25,6 +25,8 @@ type BackendPlace = {
   intensity?: string | null;
   reviewSummary?: { count: number; recommendCount: number; disappointedCount: number } | null;
   reviews?: Array<{ id: string; reaction: string; content: string; createdAt: string }>;
+  geometry?: { encodedPolyline?: string | null } | null;
+  encodedPolyline?: string | null;
   [key: string]: unknown;
 };
 
@@ -46,6 +48,7 @@ export type PlanBPlace = {
   intensity: string | null;
   reviewSummary: { count: number; recommendCount: number; disappointedCount: number } | null;
   reviews: Array<{ id: string; reaction: string; content: string; createdAt: string }>;
+  encodedPolyline: string | null;
 };
 
 export type PlanBStop = {
@@ -89,7 +92,7 @@ export type PlanBInput = {
   customCategory?: string | null;
   condition?: PlanBCondition | null;
   continuityMode?: PlanBContinuityMode | null;
-  location: { latitude: number | null; longitude: number | null };
+  location: { latitude: number; longitude: number } | null;
 };
 
 function authHeaders(accessToken: string) {
@@ -120,7 +123,8 @@ export function adaptPlanBPlace(place: BackendPlace): PlanBPlace {
     tip: place.tip ?? null,
     intensity: place.intensity ?? null,
     reviewSummary: place.reviewSummary ?? null,
-    reviews: place.reviews ?? []
+    reviews: place.reviews ?? [],
+    encodedPolyline: place.encodedPolyline ?? place.geometry?.encodedPolyline ?? null
   };
 }
 

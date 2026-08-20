@@ -33,7 +33,7 @@ export function ScheduleEditPage() {
         <div className="schedule-toolbar"><Link to={schedule ? `/schedule/daily?date=${schedule.date}` : '/schedule'} aria-label="일정으로 돌아가기">‹</Link><span>{isEdit ? '일정 수정' : '일정 추가'}</span></div>
         {isEdit && !schedule && loading ? <p className="schedule-empty">일정 정보를 불러오는 중이에요.</p> : null}
         {isEdit && !schedule && !loading ? <p className="schedule-empty">일정 정보를 찾지 못했어요. 일정 화면에서 다시 열어 주세요.</p> : null}
-        {!isEdit || schedule ? <ScheduleForm accessToken={accessToken} initialSchedule={schedule} defaultDate={defaultDate} onSaved={(saved) => navigate(`/schedule/daily?date=${saved.date}`)} onCancel={() => navigate(schedule ? `/schedule/daily?date=${schedule.date}` : '/schedule')} onDeleted={() => navigate(schedule ? `/schedule/daily?date=${schedule.date}` : '/schedule')} /> : null}
+        {!isEdit || schedule ? <><ScheduleForm accessToken={accessToken} initialSchedule={schedule} defaultDate={defaultDate} onSaved={(saved) => navigate(`/schedule/daily?date=${saved.date}`)} onCancel={() => navigate(schedule ? `/schedule/daily?date=${schedule.date}` : '/schedule')} onDeleted={() => navigate(schedule ? `/schedule/daily?date=${schedule.date}` : '/schedule')} />{schedule?.selfCareCategory ? <Link className="schedule-plan-b-link" to={`/plan-b/input?brokenScheduleId=${encodeURIComponent(schedule.id)}&date=${encodeURIComponent(schedule.date)}`}>이 일정이 바뀌었나요? Plan B 만들기</Link> : null}</> : null}
       </main>
     </AppShell>
   );
