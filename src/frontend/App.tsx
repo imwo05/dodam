@@ -4,6 +4,8 @@ import { PlaceholderPage } from './pages/PlaceholderPage';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
 import { StartPage } from './pages/StartPage';
+import { AiOnboardingPage } from './pages/AiOnboardingPage';
+import { BasicOnboardingPage } from './pages/BasicOnboardingPage';
 
 export function App() {
   return (
@@ -11,7 +13,9 @@ export function App() {
       <Route path="/" element={<StartPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
-      <Route path="/onboarding/basic" element={<PlaceholderPage title="기본 온보딩" />} />
+      <Route path="/onboarding/basic" element={<BasicOnboardingPage />} />
+      <Route path="/onboarding/ai" element={<AiOnboardingPage />} />
+      <Route path="/schedule/initial" element={<PlaceholderPage title="초기 일정" />} />
       <Route path="/home" element={<AppShell activeNav="홈" showBottomNav><PlaceholderPage title="홈" /></AppShell>} />
       <Route path="/schedule" element={<AppShell activeNav="일정" showBottomNav><PlaceholderPage title="일정" /></AppShell>} />
       <Route path="/plan-b" element={<AppShell activeNav="Plan B" showBottomNav><PlaceholderPage title="Plan B" /></AppShell>} />
