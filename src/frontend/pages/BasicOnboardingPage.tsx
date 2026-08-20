@@ -7,6 +7,8 @@ import { AppShell, PageHeader } from '../components/AppShell';
 
 const PURPOSE_OPTIONS = [
   { value: '스트레스 관리', label: '스트레스 관리' },
+  { value: '운동', label: '운동' },
+  { value: '식사', label: '식사' },
   { value: '체력 관리', label: '체력 관리' },
   { value: '기분 전환', label: '기분 전환' },
   { value: '수면 개선', label: '수면 개선' }
@@ -14,9 +16,10 @@ const PURPOSE_OPTIONS = [
 const WEEKLY_OPTIONS = [1, 2, 3, 4, 5, 6, 7].map((value) => ({ value: String(value), label: `${value}회` }));
 const MINUTE_OPTIONS = [20, 30, 45, 60, 90, 120].map((value) => ({ value: String(value), label: `${value}분` }));
 const REASON_OPTIONS = ['시간 부족', '피곤함', '갑작스러운 일정', '마음이 바뀜', '날씨', '약속'];
+const ALLOWED_REGION_CODES = new Set(['JONGNO', 'GWANAK']);
 
 type BasicValues = {
-  purpose: string;
+  purpose: string[];
   weeklyTargetCount: string;
   availableMinutes: string;
   residentialRegion: string;
@@ -26,7 +29,7 @@ type BasicValues = {
 };
 
 const initialValues: BasicValues = {
-  purpose: '',
+  purpose: [],
   weeklyTargetCount: '',
   availableMinutes: '',
   residentialRegion: '',
@@ -35,14 +38,15 @@ const initialValues: BasicValues = {
   aiStyle: 'T'
 };
 
-function SurfaceSelect({ id, label, value, options, onChange }: { id: string; label: string; value: string; options: Array<{ value: string; label: string }>; onChange: (value: string) => void }) {
+function SurfaceSelect({ id, label, value, options, onChange, disabled = false }: { id: string; label: string; value: string; options: Array<{ value: string; label: string }>; onChange: (value: string) => void; disabled?: boolean }) {
   return (
     <div className={`onboarding-surface-control ${value ? 'is-selected' : ''}`}>
       <img src={value ? '/assets/onboarding-selected-surface.png' : '/assets/onboarding-option-surface.png'} alt="" aria-hidden="true" />
-      <select id={id} aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
+      <select id={id} aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
         <option value="" />
         {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
+      <span className="onboarding-surface-control__arrow" aria-hidden="true">⌄</span>
     </div>
   );
 }
@@ -56,12 +60,28 @@ function SurfaceInput({ id, label, value, placeholder, onChange }: { id: string;
   );
 }
 
-function ReasonOption({ label, selected, onClick }: { label: string; selected: boolean; onClick: () => void }) {
+function ReasonOption({ label, selected, onClick, className = '' }: { label: string; selected: boolean; onClick: () => void; className?: string }) {
   return (
-    <button type="button" className={`onboarding-reason-option ${selected ? 'is-selected' : ''}`} onClick={onClick} aria-pressed={selected}>
+    <button type="button" className={`onboarding-reason-option ${className} ${selected ? 'is-selected' : ''}`} onClick={onClick} aria-pressed={selected}>
       <img src={selected ? '/assets/onboarding-selected-surface.png' : '/assets/onboarding-option-surface.png'} alt="" aria-hidden="true" />
       <span>{label}</span>
     </button>
+  );
+}
+
+function MultiSurfaceOptions({ label, options, selectedValues, onToggle }: { label: string; options: Array<{ value: string; label: string }>; selectedValues: string[]; onToggle: (value: string) => void }) {
+  return (
+    <div className="onboarding-purpose-options" role="group" aria-label={label}>
+      {options.map((option) => (
+        <ReasonOption
+          key={option.value}
+          className="onboarding-purpose-option"
+          label={option.label}
+          selected={selectedValues.includes(option.value)}
+          onClick={() => onToggle(option.value)}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -80,10 +100,10 @@ export function BasicOnboardingPage() {
     let active = true;
     getOnboardingOptions()
       .then((options) => {
-        if (active) setRegions(options.regions);
+        if (active) setRegions(options.regions.filter((region) => ALLOWED_REGION_CODES.has(region.code)));
       })
       .catch(() => {
-        if (active) setOptionsError('지역 선택지를 불러오고 있어요. 직접 입력해 주세요.');
+        if (active) setOptionsError('지역 선택지를 불러오지 못했어요.');
       });
     return () => { active = false; };
   }, []);
@@ -92,7 +112,7 @@ export function BasicOnboardingPage() {
     if (!profile.purpose && !profile.weeklyTargetCount && !profile.availableMinutes) return;
     setValues((current) => ({
       ...current,
-      purpose: profile.purpose,
+      purpose: profile.selfCareGoals?.length ? profile.selfCareGoals : profile.purpose ? [profile.purpose] : current.purpose,
       weeklyTargetCount: profile.weeklyTargetCount ? String(profile.weeklyTargetCount) : current.weeklyTargetCount,
       availableMinutes: profile.availableMinutes ? String(profile.availableMinutes) : current.availableMinutes,
       residentialRegion: profile.residentialRegion,
@@ -123,13 +143,23 @@ export function BasicOnboardingPage() {
     setValidationError('');
   }
 
+  function togglePurpose(purpose: string) {
+    setValues((current) => ({
+      ...current,
+      purpose: current.purpose.includes(purpose)
+        ? current.purpose.filter((item) => item !== purpose)
+        : [...current.purpose, purpose]
+    }));
+    setValidationError('');
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!accessToken) {
       setValidationError('로그인 후 기본 정보를 저장해 주세요.');
       return;
     }
-    if (!values.purpose || !values.weeklyTargetCount || !values.availableMinutes || !values.residentialRegion || !values.lifeRegion || !selectedReasons.length) {
+    if (!values.purpose.length || !values.weeklyTargetCount || !values.availableMinutes || !values.residentialRegion || !values.lifeRegion || !selectedReasons.length) {
       setValidationError('모든 기본 정보를 선택해 주세요.');
       return;
     }
@@ -140,7 +170,8 @@ export function BasicOnboardingPage() {
 
     try {
       await saveBasicProfile(accessToken, {
-        purpose: values.purpose,
+        purpose: values.purpose[0],
+        selfCareGoals: values.purpose,
         weeklyTargetCount: Number(values.weeklyTargetCount),
         availableMinutes: Number(values.availableMinutes),
         residentialRegion: values.residentialRegion,
@@ -166,8 +197,8 @@ export function BasicOnboardingPage() {
         </section>
         <form className="basic-onboarding-form" onSubmit={handleSubmit} noValidate>
           <div className="basic-onboarding-field">
-            <label htmlFor="basic-purpose">자기관리 목적 <span>*</span></label>
-            <SurfaceSelect id="basic-purpose" label="자기관리 목적" value={values.purpose} options={PURPOSE_OPTIONS} onChange={(value) => updateValue('purpose', value)} />
+            <p className="basic-onboarding-label">자기관리 목적 <span>*</span></p>
+            <MultiSurfaceOptions label="자기관리 목적" options={PURPOSE_OPTIONS} selectedValues={values.purpose} onToggle={togglePurpose} />
           </div>
           <div className="basic-onboarding-field">
             <label htmlFor="basic-weekly">주 당 횟수 <span>*</span></label>
@@ -179,21 +210,17 @@ export function BasicOnboardingPage() {
           </div>
           <div className="basic-onboarding-field">
             <label htmlFor="basic-region">거주 지역 <span>*</span></label>
-            {regionOptions.length ? (
-              <SurfaceSelect id="basic-region" label="거주 지역" value={values.residentialRegion} options={regionOptions} onChange={(value) => updateValue('residentialRegion', value)} />
-            ) : (
-              <SurfaceInput id="basic-region" label="거주 지역" value={values.residentialRegion} onChange={(value) => updateValue('residentialRegion', value)} />
-            )}
+            <SurfaceSelect id="basic-region" label="거주 지역" value={values.residentialRegion} options={regionOptions} disabled={!regionOptions.length} onChange={(value) => updateValue('residentialRegion', value)} />
           </div>
           <div className="basic-onboarding-field">
             <label htmlFor="basic-life-region">직장 / 학교 등 생활권 <span>*</span></label>
-            <SurfaceInput id="basic-life-region" label="직장 / 학교 등 생활권" value={values.lifeRegion} onChange={(value) => updateValue('lifeRegion', value)} />
+            <SurfaceSelect id="basic-life-region" label="직장 / 학교 등 생활권" value={values.lifeRegion} options={regionOptions} disabled={!regionOptions.length} onChange={(value) => updateValue('lifeRegion', value)} />
           </div>
           <div className="basic-onboarding-field basic-onboarding-field--reasons">
             <p className="basic-onboarding-label">주로 계획이 바뀌는 이유 <span>*</span></p>
             <div className="onboarding-reason-grid">
               {REASON_OPTIONS.map((reason) => <ReasonOption key={reason} label={reason} selected={values.planChangeReasons.includes(reason)} onClick={() => toggleReason(reason)} />)}
-              <ReasonOption label="직접 입력" selected={customReasonSelected} onClick={() => { setCustomReasonSelected((current) => !current); setValidationError(''); }} />
+              <ReasonOption label={customReason.trim() || '직접 입력'} selected={customReasonSelected} onClick={() => { setCustomReasonSelected((current) => !current); setValidationError(''); }} />
             </div>
             {customReasonSelected ? <SurfaceInput id="basic-custom-reason" label="직접 입력한 계획 변경 이유" value={customReason} onChange={setCustomReason} /> : null}
           </div>

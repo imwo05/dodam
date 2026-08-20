@@ -172,7 +172,7 @@ a { color: inherit; text-decoration: none; }
   background-repeat: no-repeat;
 }
 .onboarding-screen { min-height: 960px; color: var(--green); }
-.page-header--onboarding { margin-top: 9px; }
+.page-header--onboarding { position: sticky; top: 0; z-index: 10; margin-top: 9px; background: var(--paper); }
 .basic-onboarding-intro { margin: 15px 0 0 31px; }
 .basic-onboarding-intro p { margin: 0; font-family: 'Pretendard Variable', Pretendard, sans-serif; font-size: 15px; font-weight: 700; line-height: 19px; }
 .basic-onboarding-intro h2 { margin: 13px 0 0; color: var(--green); font-family: 'Pretendard Variable', Pretendard, sans-serif; font-size: 23px; font-weight: 700; line-height: 28px; letter-spacing: .02em; }
@@ -183,15 +183,24 @@ a { color: inherit; text-decoration: none; }
 .basic-onboarding-field > label span, .basic-onboarding-label span { color: #a40003; }
 .onboarding-surface-control { position: relative; width: 347px; height: 45px; margin-top: 8px; }
 .onboarding-surface-control > img, .onboarding-reason-option > img, .onboarding-tape-button > img, .onboarding-next-button > img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
-.onboarding-surface-control > select, .onboarding-surface-control > input { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; padding: 0 17px; border: 0; outline: 0; color: var(--green); background: transparent; font-family: 'Pretendard Variable', Pretendard, sans-serif; font-size: 13px; font-weight: 400; line-height: 45px; }
+.onboarding-surface-control > select, .onboarding-surface-control > input { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; padding: 0 42px 0 17px; border: 0; outline: 0; color: #4F635B; background: transparent; font-family: 'Pretendard Variable', Pretendard, sans-serif; font-size: 13px; font-weight: 400; line-height: 45px; }
 .onboarding-surface-control > select { appearance: none; cursor: pointer; }
+.onboarding-surface-control > select:focus-visible, .onboarding-surface-control > input:focus-visible { outline: 2px solid rgba(79,99,91,.55); outline-offset: 2px; }
+.onboarding-surface-control.is-selected > select, .onboarding-surface-control.is-selected > input { color: #F4F1EC; }
+.onboarding-surface-control__arrow { position: absolute; top: 50%; right: 17px; z-index: 2; transform: translateY(-58%); color: #4F635B; font-size: 18px; line-height: 1; pointer-events: none; }
+.onboarding-surface-control.is-selected .onboarding-surface-control__arrow { color: #F4F1EC; }
 .onboarding-surface-control > select option { color: var(--green); background: var(--paper); }
 .onboarding-surface-control > input::placeholder { color: rgba(79,99,91,.7); }
+.onboarding-purpose-options { display: grid; grid-template-columns: repeat(2, 166px); gap: 8px 6px; margin-top: 8px; }
+.onboarding-purpose-option { width: 166px; min-height: 45px; font-size: 13px; line-height: 18px; }
+.onboarding-purpose-option > span { overflow-wrap: anywhere; }
 .basic-onboarding-field--reasons { margin-top: 19px !important; }
 .onboarding-reason-grid { display: grid; grid-template-columns: repeat(4, 73px); column-gap: 15px; row-gap: 8px; margin: 6px 0 0 2px; }
 .onboarding-reason-option { position: relative; display: grid; width: 73px; height: 45px; margin: 0; padding: 4px 5px; place-items: center; border: 0; color: var(--green); background: transparent; font-family: 'Pretendard Variable', Pretendard, sans-serif; font-size: 10px; font-weight: 400; line-height: 13px; text-align: center; cursor: pointer; }
-.onboarding-reason-option > span { position: relative; z-index: 1; }
-.onboarding-reason-option.is-selected { color: var(--paper); font-weight: 700; }
+.onboarding-reason-option > span { position: relative; z-index: 2; color: #4F635B; }
+.onboarding-reason-option.is-selected > span { color: #F4F1EC; }
+.onboarding-reason-option.is-selected { font-weight: 700; }
+.onboarding-reason-option:focus-visible { outline: 2px solid rgba(79,99,91,.55); outline-offset: 2px; }
 .basic-onboarding-field--reasons .onboarding-surface-control { margin-top: 10px; }
 .basic-onboarding-field--style { margin-top: 19px !important; }
 .onboarding-style-options { display: flex; gap: 6px; margin-top: 13px; }

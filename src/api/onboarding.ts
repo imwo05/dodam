@@ -4,6 +4,7 @@ export type AiStyle = 'T' | 'F';
 
 export type BasicProfileInput = {
   purpose: string;
+  selfCareGoals?: string[];
   weeklyTargetCount: number;
   availableMinutes: number;
   residentialRegion: string;
