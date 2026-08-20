@@ -18,7 +18,8 @@ const DISTRICTS = {
   관악: ['봉천동', '신림동', '남현동', '난곡동', '난향동', '조원동', '대학동', '미성동', '서원동', '신원동', '인헌동', '행운동', '청룡동', '은천동', '성현동', '중앙동', '청림동', '삼성동', '보라매동', '낙성대', '서울대입구', '샤로수길'],
   종로: ['청운동', '효자동', '사직동', '삼청동', '부암동', '평창동', '무악동', '교남동', '가회동', '종로1가', '종로2가', '종로3가', '종로4가', '종로5가', '종로6가', '이화동', '혜화동', '창신동', '숭인동', '서촌', '북촌', '대학로', '인사동', '익선동']
 };
-const LARGE_CHAIN_PATTERN = /스타벅스|투썸|이디야|메가커피|컴포즈|빽다방|할리스|폴바셋|탐앤탐스|커피빈|파스쿠찌|던킨|파리바게뜨|뚜레쥬르|서브웨이|스포애니|커브스|바디채널/i;
+const LARGE_CHAIN_PATTERN = /스타벅스|투썸|이디야|메가MGC|메가커피|컴포즈|빽다방|할리스|폴바셋|탐앤탐스|커피빈|파스쿠찌|던킨|파리바게뜨|뚜레쥬르|서브웨이|써브웨이|샐러디|포케올데이|슬로우캘리|프레퍼스|짐박스|스포애니|커브스|바디채널|F45|마음수련|놀숲|맘스터치|텐퍼센트|설빙|바나프레소|오크베리|지미존스|Poke all day|키즈카페|키즈파티|키즈풀|만화카페|보드게임|PC방|노래방|방탈출|오락실|게임장/i;
+const MULTI_LOCATION_PATTERN = /(지점|직영점|본점|[0-9]호점|역점|센터점)/;
 const [targetDistrict, targetCategory] = process.argv.slice(2);
 if (!DISTRICTS[targetDistrict] || !CATEGORIES[targetCategory] || !Number.isInteger(REQUIRED_PER_CATEGORY) || REQUIRED_PER_CATEGORY < 1) throw new Error('Usage: node scripts/collect-place-candidates.js <관악|종로> <유형> [count]');
 
@@ -40,7 +41,7 @@ for (const [district, areas] of Object.entries(DISTRICTS).filter(([district]) =>
       for (const items of results) {
         for (const item of items) addCandidate({ district, category, spec, item });
       }
-      if (collected.get(key).length >= REQUIRED_PER_CATEGORY + 20) break;
+      if (collected.get(key).length >= REQUIRED_PER_CATEGORY + 5) break;
     }
     console.log(`${key}: ${collected.get(key).length} unique API candidates`);
   }
