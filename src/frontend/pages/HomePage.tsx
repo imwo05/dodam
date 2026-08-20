@@ -56,7 +56,7 @@ export function HomePage() {
   return (
     <AppShell className="product-shell home-shell" activeNav="홈" showBottomNav>
       <main className="home-screen" data-node-id="291:4318">
-        <div className="home-top-actions"><button type="button" onClick={() => navigate('/schedule/new')} aria-label="일정 추가">+</button></div>
+        <div className="home-top-actions"><button type="button" onClick={() => navigate('/places/new/point')} aria-label="장소 추가">+</button></div>
         <p className="product-eyebrow">{formatHeaderDate(date)}</p>
         <h1>{name}님, 오늘도 성장하는<br />하루 보내시길 바랍니다</h1>
         {error ? <p className="home-empty" role="alert">{error}</p> : null}

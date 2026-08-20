@@ -16,6 +16,7 @@ import type { MapBounds, Place } from '../components/map/map.types';
 const CATEGORY_LABELS: Record<string, string> = { EXERCISE: '운동', DIET: '식사', WALK: '산책', RUNNING: '달리기', MENTAL_HEALTH: '마음 돌보기', CUSTOM: '직접 입력' };
 const CONDITION_LABELS: Record<string, string> = { VERY_GOOD: '아주 좋아요', GOOD: '좋아요', NORMAL: '보통이에요', TIRED: '조금 피곤해요', VERY_TIRED: '많이 피곤해요' };
 const CONTINUITY_LABELS: Record<string, string> = { SIMILAR: '비슷한 활동 이어가기', EASY: '더 쉬운 활동으로 바꾸기', MINIMUM: '최소한으로 이어가기', AUTO: '담이에게 맡기기' };
+const INVALID_TIME_RANGE_MESSAGE = '종료 시간은 시작 시간보다 늦게 설정해 주세요.';
 
 function labelFor(value: string, labels: Record<string, string>) { return labels[value] ?? value; }
 function requestError(error: unknown, fallback: string) { return error instanceof Error ? error.message : fallback; }
@@ -51,9 +52,9 @@ export function PlanBEntryPage() {
   return <AppShell className="product-shell plan-b-shell" activeNav="Plan B" showBottomNav><main className="plan-b-screen plan-b-entry-screen"><PageHeader title="Plan B" backTo="/home" className="page-header--product" /><section className="plan-b-entry-copy"><p className="product-eyebrow">계획이 바뀐 순간</p><h1>오늘 가능한<br />다른 선택을 찾아볼까요?</h1><p>남은 시간과 컨디션을 알려주면 담이가 지금 할 수 있는 Plan B를 추천해요.</p></section><MapView mode="EXPLORE" places={places} className="plan-b-map-boundary" ariaLabel="Plan B 장소 지도 영역" onBoundsChange={setBounds} onPlaceSelect={(place) => navigate(`/places/${place.id}`)} isLoading={loading} error={error} /><p className="plan-b-map-note">장소를 누르면 상세 정보를 확인할 수 있어요.</p><Link className="tape-button plan-b-primary-action" to="/plan-b/input"><img src="/assets/tape-primary.png" alt="" aria-hidden="true" /><span>Plan B 시작하기</span></Link></main></AppShell>;
 }
 
-function TimeField({ id, label, value, minCanonical, onChange }: { id: string; label: string; value: string; minCanonical?: string | null; onChange: (value: string) => void }) {
+function TimeField({ id, label, value, minCanonical, onChange, onOpen }: { id: string; label: string; value: string; minCanonical?: string | null; onChange: (value: string) => void; onOpen?: () => void }) {
   const [open, setOpen] = useState(false);
-  return <div className="plan-b-time-field"><span>{label}</span><button type="button" className={`plan-b-time-button ${value ? 'is-selected' : ''}`} id={id} onClick={() => setOpen(true)} aria-haspopup="dialog">{value ? formatTime(value) : '시간 선택'}</button>{open ? <ScheduleTimePicker value={value} onChange={onChange} onClose={() => setOpen(false)} minCanonical={minCanonical} minuteStep={5} /> : null}</div>;
+  return <div className="plan-b-time-field"><span>{label}</span><button type="button" className={`plan-b-time-button ${value ? 'is-selected' : ''}`} id={id} onClick={() => { onOpen?.(); setOpen(true); }} aria-haspopup="dialog">{value ? formatTime(value) : '시간 선택'}</button>{open ? <ScheduleTimePicker value={value} onChange={onChange} onClose={() => setOpen(false)} minCanonical={minCanonical} minuteStep={5} /> : null}</div>;
 }
 
 export function PlanBInputPage() {
@@ -67,11 +68,30 @@ export function PlanBInputPage() {
   const [loading, setLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [error, setError] = useState('');
+  const [timeError, setTimeError] = useState('');
   const [optionsError, setOptionsError] = useState('');
   const [locationMessage, setLocationMessage] = useState('');
 
   useEffect(() => { getOnboardingOptions().then(setOptions).catch((requestErrorValue) => setOptionsError(requestError(requestErrorValue, 'Plan B 선택지를 불러오지 못했어요.'))); }, []);
   function update<K extends keyof StoredPlanBInput>(key: K, value: StoredPlanBInput[K]) { setValues((current) => ({ ...current, [key]: value })); setError(''); }
+  function updateStartTime(next: string) {
+    const hasEndTime = Boolean(values.endTime);
+    const endTimeIsInvalid = hasEndTime && !isTimeAfter(next, values.endTime);
+    setValues((current) => ({ ...current, startTime: next, endTime: endTimeIsInvalid ? '' : current.endTime }));
+    setTimeError((current) => endTimeIsInvalid ? INVALID_TIME_RANGE_MESSAGE : (hasEndTime ? '' : current));
+    setError('');
+  }
+  function updateEndTime(next: string) {
+    if (!isTimeAfter(values.startTime, next)) {
+      setValues((current) => ({ ...current, endTime: '' }));
+      setTimeError(INVALID_TIME_RANGE_MESSAGE);
+      setError('');
+      return;
+    }
+    setValues((current) => ({ ...current, endTime: next }));
+    setTimeError('');
+    setError('');
+  }
   async function requestLocation() {
     setLocationLoading(true); setLocationMessage('');
     try { const position = await getCurrentPosition({ enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }); update('currentLocation', position); setLocationMessage('현재 위치를 사용해 추천할게요.'); }
@@ -81,9 +101,12 @@ export function PlanBInputPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!accessToken) { setError('로그인 후 Plan B를 시작해 주세요.'); return; }
-    if (!options || !values.selfCareCategory || !values.condition || !values.continuityMode || !isTimeAfter(values.startTime, values.endTime)) { setError('시간과 모든 Plan B 선택지를 확인해 주세요.'); return; }
+    if (!values.date) { setTimeError('날짜를 선택해 주세요.'); setError(''); return; }
+    if (!values.startTime || !values.endTime) { setTimeError('시작 시간과 종료 시간을 선택해 주세요.'); setError(''); return; }
+    if (!isTimeAfter(values.startTime, values.endTime)) { setTimeError(INVALID_TIME_RANGE_MESSAGE); setError(''); return; }
+    if (!options || !values.selfCareCategory || !values.condition || !values.continuityMode) { setTimeError(''); setError('시간과 모든 Plan B 선택지를 확인해 주세요.'); return; }
     if (values.selfCareCategory === 'CUSTOM' && !values.customCategory.trim()) { setError('직접 입력할 자기관리 활동을 적어 주세요.'); return; }
-    setLoading(true); setError('');
+    setLoading(true); setTimeError(''); setError('');
     const request: ApiPlanBInput = { date: values.date, startTime: values.startTime, endTime: values.endTime, brokenScheduleId: values.brokenScheduleId ?? null, selfCareCategory: values.selfCareCategory as PlanBCategory, customCategory: values.selfCareCategory === 'CUSTOM' ? values.customCategory.trim() : null, condition: values.condition as PlanBCondition, continuityMode: values.continuityMode as PlanBContinuityMode, location: values.currentLocation ? { latitude: values.currentLocation.lat, longitude: values.currentLocation.lng } : null };
     try { const response = await createPlanBRecommendations(accessToken, request); setInput({ ...values, date: response.date || values.date }); navigate(`/plan-b/${response.sessionId}/recommendations`); }
     catch (requestErrorValue) { setError(requestError(requestErrorValue, '추천을 만들지 못했어요.')); }
@@ -92,7 +115,31 @@ export function PlanBInputPage() {
   const categoryOptions = (options?.selfCareCategories ?? []).map((value) => ({ value, label: labelFor(value, CATEGORY_LABELS) }));
   const conditionOptions = (options?.conditions ?? []).map((value) => ({ value, label: labelFor(value, CONDITION_LABELS) }));
   const continuityOptions = (options?.continuityModes ?? []).map((value) => ({ value, label: labelFor(value, CONTINUITY_LABELS) }));
-  return <AppShell className="product-shell plan-b-shell" activeNav="Plan B" showBottomNav><main className="plan-b-screen plan-b-input-screen"><PageHeader title="Plan B 입력" backTo="/plan-b" className="page-header--product" /><form onSubmit={submit} className="plan-b-form" noValidate><p className="plan-b-section-label">오늘의 조건</p><label className="plan-b-field-label" htmlFor="plan-b-date">날짜</label><div className="plan-b-native-input"><img src="/assets/onboarding-option-surface.png" alt="" aria-hidden="true" /><input id="plan-b-date" type="date" value={values.date} onChange={(event) => update('date', event.target.value)} /></div><div className="plan-b-time-row"><TimeField id="plan-b-start" label="시작 시간" value={values.startTime} onChange={(value) => update('startTime', value)} /><TimeField id="plan-b-end" label="종료 시간" value={values.endTime} minCanonical={values.startTime} onChange={(value) => update('endTime', value)} /></div><SurfaceSelect id="plan-b-category" label="자기관리 활동" value={values.selfCareCategory} options={categoryOptions} placeholder="자기관리 활동을 선택하세요" onChange={(value) => update('selfCareCategory', value)} disabled={!options} />{values.selfCareCategory === 'CUSTOM' ? <div className="plan-b-native-input"><img src="/assets/onboarding-option-surface.png" alt="" aria-hidden="true" /><input aria-label="직접 입력할 자기관리 활동" value={values.customCategory} onChange={(event) => update('customCategory', event.target.value)} placeholder="활동을 직접 입력하세요" /></div> : null}<SurfaceSelect id="plan-b-condition" label="현재 컨디션" value={values.condition} options={conditionOptions} placeholder="현재 컨디션을 선택하세요" onChange={(value) => update('condition', value)} disabled={!options} /><SurfaceSelect id="plan-b-continuity" label="이어가기 방식" value={values.continuityMode} options={continuityOptions} placeholder="이어가기 방식을 선택하세요" onChange={(value) => update('continuityMode', value)} disabled={!options} /><section className="plan-b-location-section"><div><p className="plan-b-section-label">현재 위치</p><p>{values.currentLocation ? `위치가 설정되었어요 (${values.currentLocation.lat.toFixed(4)}, ${values.currentLocation.lng.toFixed(4)})` : '선택 사항 · 위치 없이도 추천을 받을 수 있어요.'}</p></div><button type="button" className="plan-b-outline-action" onClick={() => void requestLocation()} disabled={locationLoading}>{locationLoading ? '확인 중' : '현재 위치 사용'}</button></section>{locationMessage ? <p className="plan-b-hint">{locationMessage}</p> : null}{optionsError ? <PageError message={optionsError} /> : null}{error ? <PageError message={error} /> : null}<button type="submit" className="tape-button plan-b-primary-action" disabled={loading || !options}><img src="/assets/tape-primary.png" alt="" aria-hidden="true" /><span>{loading ? '추천을 만드는 중' : '추천 받아보기'}</span></button></form></main></AppShell>;
+  return (
+    <AppShell className="product-shell plan-b-shell" activeNav="Plan B" showBottomNav>
+      <main className="plan-b-screen plan-b-input-screen">
+        <PageHeader title="Plan B 입력" backTo="/plan-b" className="page-header--product" />
+        <form onSubmit={submit} className="plan-b-form" noValidate>
+          <p className="plan-b-section-label">오늘의 조건</p>
+          <label className="plan-b-field-label" htmlFor="plan-b-date">날짜</label>
+          <div className="plan-b-native-input"><img src="/assets/onboarding-option-surface.png" alt="" aria-hidden="true" /><input id="plan-b-date" type="date" value={values.date} onChange={(event) => update('date', event.target.value)} /></div>
+          <div className="plan-b-time-row">
+            <TimeField id="plan-b-start" label="시작 시간" value={values.startTime} onChange={updateStartTime} />
+            <TimeField id="plan-b-end" label="종료 시간" value={values.endTime} minCanonical={values.startTime} onChange={updateEndTime} onOpen={() => setTimeError('')} />
+          </div>
+          <SurfaceSelect id="plan-b-category" label="자기관리 활동" value={values.selfCareCategory} options={categoryOptions} placeholder="자기관리 활동을 선택하세요" onChange={(value) => update('selfCareCategory', value)} disabled={!options} />
+          {values.selfCareCategory === 'CUSTOM' ? <div className="plan-b-native-input"><img src="/assets/onboarding-option-surface.png" alt="" aria-hidden="true" /><input aria-label="직접 입력할 자기관리 활동" value={values.customCategory} onChange={(event) => update('customCategory', event.target.value)} placeholder="활동을 직접 입력하세요" /></div> : null}
+          <SurfaceSelect id="plan-b-condition" label="현재 컨디션" value={values.condition} options={conditionOptions} placeholder="현재 컨디션을 선택하세요" onChange={(value) => update('condition', value)} disabled={!options} />
+          <SurfaceSelect id="plan-b-continuity" label="이어가기 방식" value={values.continuityMode} options={continuityOptions} placeholder="이어가기 방식을 선택하세요" onChange={(value) => update('continuityMode', value)} disabled={!options} />
+          <section className="plan-b-location-section"><div><p className="plan-b-section-label">현재 위치</p><p>{values.currentLocation ? `위치가 설정되었어요 (${values.currentLocation.lat.toFixed(4)}, ${values.currentLocation.lng.toFixed(4)})` : '선택 사항 · 위치 없이도 추천을 받을 수 있어요.'}</p></div><button type="button" className="plan-b-outline-action" onClick={() => void requestLocation()} disabled={locationLoading}>{locationLoading ? '확인 중' : '현재 위치 사용'}</button></section>
+          {locationMessage ? <p className="plan-b-hint">{locationMessage}</p> : null}
+          {optionsError ? <PageError message={optionsError} /> : null}
+          {timeError ? <PageError message={timeError} /> : error ? <PageError message={error} /> : null}
+          <button type="submit" className="tape-button plan-b-primary-action" disabled={loading || !options}><img src="/assets/tape-primary.png" alt="" aria-hidden="true" /><span>{loading ? '추천을 만드는 중' : '추천 받아보기'}</span></button>
+        </form>
+      </main>
+    </AppShell>
+  );
 }
 
 function StopOption({ stop, selected, onToggle }: { stop: PlanBStop; selected: boolean; onToggle: () => void }) {

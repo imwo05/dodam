@@ -88,7 +88,7 @@ export function ScheduleTimePicker({ value, onChange, onClose, minCanonical, min
       return false;
     }
     if (!isAllowed(selected.meridiem, hour, normalizedMinute, minCanonical)) {
-      setError('종료 시간은 시작 시간보다 늦어야 해요.');
+      setError('종료 시간은 시작 시간보다 늦게 설정해 주세요.');
       return false;
     }
     setPart(selected.meridiem, hour, normalizedMinute);
