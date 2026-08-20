@@ -2,8 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { getOnboardingOptions } from '../../api/onboarding';
 import type { Schedule, ScheduleWriteInput, SelfCareCategory } from '../../api/schedules';
 import { useSchedules } from '../../contexts/ScheduleContext';
-import { todayKey } from '../utils/date';
-import { ScheduleTimeWheel } from './ScheduleTimeWheel';
+import { canonicalTo12Hour, isTimeAfter, timeToMinutes, todayKey } from '../utils/date';
+import { ScheduleTimePicker } from './ScheduleTimePicker';
 
 const categoryLabels: Record<SelfCareCategory, string> = {
   EXERCISE: '운동',
@@ -36,6 +36,7 @@ export function ScheduleForm({ accessToken, initialSchedule, defaultDate = today
   const [timeTarget, setTimeTarget] = useState<'start' | 'end' | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState('');
+  const [endTimePrompt, setEndTimePrompt] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -55,7 +56,7 @@ export function ScheduleForm({ accessToken, initialSchedule, defaultDate = today
       setError('날짜, 시간, 활동을 입력해 주세요.');
       return;
     }
-    if (endTime <= startTime) {
+    if (!isTimeAfter(startTime, endTime)) {
       setError('종료 시간은 시작 시간보다 늦어야 해요.');
       return;
     }
@@ -67,6 +68,30 @@ export function ScheduleForm({ accessToken, initialSchedule, defaultDate = today
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : '일정을 저장하지 못했어요.');
     }
+  }
+
+  function updateStartTime(next: string) {
+    setStartTime(next);
+    if (endTime && timeToMinutes(endTime) <= timeToMinutes(next)) {
+      setEndTime('');
+      setEndTimePrompt('종료 시간을 다시 선택해 주세요.');
+    }
+  }
+
+  function updateEndTime(next: string) {
+    if (startTime && timeToMinutes(next) <= timeToMinutes(startTime)) {
+      setEndTime('');
+      setEndTimePrompt('종료 시간을 다시 선택해 주세요.');
+      return;
+    }
+    setEndTime(next);
+    setEndTimePrompt('');
+  }
+
+  function displayTime(value: string) {
+    if (!value) return '종료 시간 선택';
+    const parsed = canonicalTo12Hour(value);
+    return `${parsed.meridiem === 'AM' ? '오전' : '오후'} ${parsed.hour}:${String(parsed.minute).padStart(2, '0')}`;
   }
 
   async function deleteCurrent() {
@@ -93,10 +118,11 @@ export function ScheduleForm({ accessToken, initialSchedule, defaultDate = today
 
       <span className="schedule-form__label">시간 <span>*</span></span>
       <div className="schedule-form__time-row">
-        <button type="button" className="schedule-form__time-button" onClick={() => setTimeTarget('start')}>{startTime} ↓</button>
+        <button type="button" className="schedule-form__time-button" onClick={() => setTimeTarget('start')}>{displayTime(startTime)} <span aria-hidden="true">↓</span></button>
         <span aria-hidden="true">~</span>
-        <button type="button" className="schedule-form__time-button" onClick={() => setTimeTarget('end')}>{endTime} ↓</button>
+        <button type="button" className="schedule-form__time-button" onClick={() => setTimeTarget('end')}>{displayTime(endTime)} <span aria-hidden="true">↓</span></button>
       </div>
+      {endTimePrompt ? <p className="schedule-form__error" role="alert">{endTimePrompt}</p> : null}
 
       <label className="schedule-form__label" htmlFor="schedule-title">활동 <span>*</span></label>
       <div className="schedule-form__surface schedule-form__surface--title">
@@ -104,11 +130,11 @@ export function ScheduleForm({ accessToken, initialSchedule, defaultDate = today
         <input id="schedule-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="활동을 입력하세요." maxLength={100} />
       </div>
 
-      <span className="schedule-form__label">고정 일정 여부 <span>*</span></span>
-      <div className="schedule-form__toggle" role="group" aria-label="고정 일정 여부">
-        <button className={isFixed ? 'is-selected' : ''} type="button" aria-pressed={isFixed} onClick={() => setIsFixed(true)}>ON</button>
-        <button className={!isFixed ? 'is-selected' : ''} type="button" aria-pressed={!isFixed} onClick={() => setIsFixed(false)}>OFF</button>
-      </div>
+      <label className="schedule-switch">
+        <input type="checkbox" checked={isFixed} onChange={(event) => setIsFixed(event.target.checked)} />
+        <span className="schedule-switch__track" aria-hidden="true"><span /></span>
+        <span className="schedule-switch__label">고정 일정 <em aria-hidden="true">*</em></span>
+      </label>
 
       <span className="schedule-form__label">자기관리 항목</span>
       <div className="schedule-form__categories" role="group" aria-label="자기관리 항목">
@@ -129,7 +155,7 @@ export function ScheduleForm({ accessToken, initialSchedule, defaultDate = today
         {confirmingDelete ? <button type="button" className="schedule-form__danger" onClick={() => void deleteCurrent()}>삭제</button> : null}
         <button type="submit" className="schedule-form__submit" disabled={scheduleLoading}>{scheduleLoading ? '저장 중' : '완료'}</button>
       </div>
-      {timeTarget ? <ScheduleTimeWheel value={timeTarget === 'start' ? startTime : endTime} onChange={timeTarget === 'start' ? setStartTime : setEndTime} onClose={() => setTimeTarget(null)} /> : null}
+      {timeTarget ? <ScheduleTimePicker value={timeTarget === 'start' ? startTime : endTime} minCanonical={timeTarget === 'end' ? startTime : null} onChange={timeTarget === 'start' ? updateStartTime : updateEndTime} onClose={() => setTimeTarget(null)} /> : null}
     </form>
   );
 }

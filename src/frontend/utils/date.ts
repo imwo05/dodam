@@ -51,6 +51,34 @@ export function timeToMinutes(value: string | null | undefined) {
   return hours * 60 + minutes;
 }
 
+export type Meridiem = 'AM' | 'PM';
+
+export function canonicalTo12Hour(value: string) {
+  const totalMinutes = timeToMinutes(value);
+  const hours24 = Math.floor(totalMinutes / 60) % 24;
+  return {
+    meridiem: hours24 >= 12 ? 'PM' as const : 'AM' as const,
+    hour: hours24 % 12 || 12,
+    minute: totalMinutes % 60
+  };
+}
+
+export function twelveHourToCanonical(meridiem: Meridiem, hour: number, minute: number) {
+  const normalizedHour = hour === 12 ? 0 : hour;
+  const hours24 = normalizedHour + (meridiem === 'PM' ? 12 : 0);
+  return `${String(hours24).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+export function isCanonicalTime(value: string | null | undefined) {
+  if (!value || !/^\d{2}:\d{2}$/.test(value)) return false;
+  const [hour, minute] = value.split(':').map(Number);
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+}
+
+export function isTimeAfter(start: string | null | undefined, end: string | null | undefined) {
+  return isCanonicalTime(start) && isCanonicalTime(end) && timeToMinutes(end) > timeToMinutes(start);
+}
+
 export function minutesToTime(value: number) {
   const hours = Math.floor(value / 60) % 24;
   const minutes = value % 60;
@@ -58,7 +86,13 @@ export function minutesToTime(value: number) {
 }
 
 export function formatTimeRange(startTime: string, endTime: string | null) {
-  return endTime ? `${startTime}~${endTime}` : `${startTime}~`;
+  return endTime ? `${formatTime(startTime)}~${formatTime(endTime)}` : `${formatTime(startTime)}~`;
+}
+
+export function formatTime(value: string) {
+  if (!isCanonicalTime(value)) return value;
+  const parsed = canonicalTo12Hour(value);
+  return `${parsed.meridiem} ${parsed.hour}:${String(parsed.minute).padStart(2, '0')}`;
 }
 
 export function weekOfMonthLabel(value: string) {

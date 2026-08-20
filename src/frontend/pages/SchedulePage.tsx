@@ -1,37 +1,63 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { Schedule } from '../../api/schedules';
 import { getHome, type HomeResponse } from '../../api/home';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSchedules } from '../../contexts/ScheduleContext';
 import { AppShell } from '../components/AppShell';
-import { ScheduleChip } from '../components/ScheduleChip';
-import { addDays, formatDateLabel, formatHeaderDate, getWeekDates, timeToMinutes, todayKey, weekOfMonthLabel } from '../utils/date';
+import { ScheduleChip, schedulePresentation } from '../components/ScheduleChip';
+import { addDays, formatDateLabel, formatHeaderDate, formatTime, getWeekDates, timeToMinutes, todayKey, weekOfMonthLabel } from '../utils/date';
 
 const CALENDAR_START = 6 * 60;
 const CALENDAR_END = 24 * 60;
 const HOUR_HEIGHT = 54;
 
-function overlap(schedule: Schedule, other: Schedule) {
-  return timeToMinutes(schedule.startTime) < timeToMinutes(other.endTime) && timeToMinutes(other.startTime) < timeToMinutes(schedule.endTime);
-}
+function layoutForSchedules(schedules: Schedule[]) {
+  const result = new Map<string, { column: number; columns: number }>();
+  const ordered = [...schedules].sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime) || timeToMinutes(a.endTime) - timeToMinutes(b.endTime) || a.id.localeCompare(b.id));
+  let group: Schedule[] = [];
+  let groupEnd = -1;
 
-function layoutFor(schedule: Schedule, schedules: Schedule[]) {
-  const overlapping = schedules.filter((item) => overlap(schedule, item)).sort((a, b) => a.startTime.localeCompare(b.startTime) || a.id.localeCompare(b.id));
-  const column = Math.max(0, overlapping.findIndex((item) => item.id === schedule.id));
-  return { column, columns: Math.max(1, overlapping.length) };
+  function finishGroup() {
+    if (!group.length) return;
+    const laneEnds: number[] = [];
+    const placements: Array<{ schedule: Schedule; column: number }> = [];
+    for (const schedule of group) {
+      const start = timeToMinutes(schedule.startTime);
+      const end = timeToMinutes(schedule.endTime);
+      let column = laneEnds.findIndex((laneEnd) => laneEnd <= start);
+      if (column < 0) column = laneEnds.length;
+      laneEnds[column] = end;
+      placements.push({ schedule, column });
+    }
+    placements.forEach(({ schedule, column }) => result.set(schedule.id, { column, columns: laneEnds.length }));
+    group = [];
+    groupEnd = -1;
+  }
+
+  ordered.forEach((schedule) => {
+    const start = timeToMinutes(schedule.startTime);
+    const end = timeToMinutes(schedule.endTime);
+    if (group.length && start >= groupEnd) finishGroup();
+    group.push(schedule);
+    groupEnd = Math.max(groupEnd, end);
+  });
+  finishGroup();
+  return result;
 }
 
 function CalendarColumn({ date, schedules, onOpen }: { date: string; schedules: Schedule[]; onOpen: (schedule: Schedule) => void }) {
   const ordered = [...schedules].sort((a, b) => a.startTime.localeCompare(b.startTime));
+  const layouts = layoutForSchedules(ordered);
   return (
     <div className="calendar-board__column" data-date={date}>
       {ordered.map((schedule) => {
         const top = Math.max(0, timeToMinutes(schedule.startTime) - CALENDAR_START) * HOUR_HEIGHT / 60;
         const bottom = Math.min(CALENDAR_END, timeToMinutes(schedule.endTime)) - Math.max(CALENDAR_START, timeToMinutes(schedule.startTime));
         const height = Math.max(34, bottom * HOUR_HEIGHT / 60);
-        const layout = layoutFor(schedule, ordered);
-        return <button key={schedule.id} type="button" className={`calendar-event calendar-event--${schedule.isFixed ? 'fixed' : 'flexible'} ${schedule.selfCareCategory ? 'calendar-event--self-care' : ''}`} style={{ top, height, left: `${(layout.column / layout.columns) * 100}%`, width: `${100 / layout.columns}%` }} onClick={() => onOpen(schedule)} title={schedule.title}><span>{schedule.startTime}</span><strong>{schedule.title}</strong></button>;
+        const layout = layouts.get(schedule.id) ?? { column: 0, columns: 1 };
+        const presentation = schedulePresentation(schedule);
+        return <button key={schedule.id} type="button" className={`calendar-event ${presentation.className}`} style={{ top, height, left: `${(layout.column / layout.columns) * 100}%`, width: `${100 / layout.columns}%` }} onClick={() => onOpen(schedule)} title={schedule.title}><span>{formatTime(schedule.startTime)}</span><strong className={`calendar-event__title--${presentation.titleWeight}`}>{schedule.title}</strong></button>;
       })}
     </div>
   );
@@ -39,8 +65,14 @@ function CalendarColumn({ date, schedules, onOpen }: { date: string; schedules: 
 
 function WeeklyCalendar({ dates, schedules, onOpen }: { dates: string[]; schedules: Schedule[]; onOpen: (schedule: Schedule) => void }) {
   const hours = Array.from({ length: 19 }, (_, index) => index + 6);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const earliest = schedules.length ? Math.min(...schedules.map((schedule) => timeToMinutes(schedule.startTime))) : new Date().getHours() * 60 + new Date().getMinutes();
+    const target = Math.max(0, Math.min(CALENDAR_END - CALENDAR_START, earliest - CALENDAR_START) * HOUR_HEIGHT / 60 - 160);
+    if (scrollRef.current) scrollRef.current.scrollTop = target;
+  }, [dates, schedules]);
   return (
-    <div className="calendar-scroll" aria-label="주간 일정">
+    <div ref={scrollRef} className="calendar-scroll" aria-label="주간 일정">
       <div className="calendar-board" style={{ height: `${(CALENDAR_END - CALENDAR_START) * HOUR_HEIGHT / 60 + 44}px` }}>
         <div className="calendar-board__header">
           <span aria-hidden="true" />
@@ -82,12 +114,12 @@ export function SchedulePage() {
           <strong>{weekOfMonthLabel(dates[0])}</strong>
           <button type="button" onClick={() => setSelectedDate(addDays(selectedDate, 7))} aria-label="다음 주">›</button>
         </div>
-        <WeeklyCalendar dates={dates} schedules={weekSchedules} onOpen={(schedule) => navigate(`/schedule/${schedule.id}/edit`, { state: { schedule } })} />
+        <WeeklyCalendar dates={dates} schedules={weekSchedules} onOpen={(schedule) => navigate(`/schedule/${schedule.id}/edit?date=${encodeURIComponent(schedule.date)}`, { state: { schedule } })} />
         {loading ? <p className="schedule-empty">일정을 불러오는 중이에요.</p> : null}
         {error ? <p className="schedule-page__error" role="alert">{error}</p> : null}
         <section className="schedule-section">
           <div className="schedule-section__heading"><h2>데일리 일정</h2><Link to={`/schedule/daily?date=${selectedDate}`}>&gt;</Link></div>
-          {weekSchedules.filter((schedule) => schedule.date === selectedDate).length ? <div className="schedule-chip-list">{weekSchedules.filter((schedule) => schedule.date === selectedDate).map((schedule) => <ScheduleChip key={schedule.id} schedule={schedule} compact onClick={() => navigate(`/schedule/${schedule.id}/edit`, { state: { schedule } })} />)}</div> : <p className="schedule-empty">{formatDateLabel(selectedDate)} 일정이 없어요.</p>}
+          {weekSchedules.filter((schedule) => schedule.date === selectedDate).length ? <div className="schedule-chip-list">{weekSchedules.filter((schedule) => schedule.date === selectedDate).map((schedule) => <ScheduleChip key={schedule.id} schedule={schedule} compact onClick={() => navigate(`/schedule/${schedule.id}/edit?date=${encodeURIComponent(schedule.date)}`, { state: { schedule } })} />)}</div> : <p className="schedule-empty">{formatDateLabel(selectedDate)} 일정이 없어요.</p>}
         </section>
         <PlaceStrip heading="추천 장소" places={homeData?.realtimeRecommendedPlaces ?? []} />
         <PlaceStrip heading="저장된 장소" places={homeData?.savedPlaces ?? []} />

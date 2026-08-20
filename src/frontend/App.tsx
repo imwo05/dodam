@@ -13,6 +13,12 @@ import { HomePage } from './pages/HomePage';
 import { SchedulePage } from './pages/SchedulePage';
 import { DailySchedulePage } from './pages/DailySchedulePage';
 import { ScheduleEditPage } from './pages/ScheduleEditPage';
+import { ArchivePage } from './pages/ArchivePage';
+import { SavedPlacesPage } from './pages/SavedPlacesPage';
+import { MyActivityPage } from './pages/MyActivityPage';
+import { ReviewManagementPage } from './pages/ReviewManagementPage';
+import { JournalDetailPage } from './pages/JournalDetailPage';
+import { MyPagePage } from './pages/MyPagePage';
 import { useAuth } from '../contexts/AuthContext';
 
 function RouteLoading() {
@@ -52,8 +58,13 @@ export function App() {
       <Route path="/schedule/new" element={<AuthenticatedRoute><ScheduleEditPage /></AuthenticatedRoute>} />
       <Route path="/schedule/:id/edit" element={<AuthenticatedRoute><ScheduleEditPage /></AuthenticatedRoute>} />
       <Route path="/plan-b" element={<AppShell activeNav="Plan B" showBottomNav><PlaceholderPage title="Plan B" /></AppShell>} />
-      <Route path="/archive" element={<AppShell activeNav="아카이브" showBottomNav><PlaceholderPage title="아카이브" /></AppShell>} />
-      <Route path="/my-page" element={<AppShell activeNav="내 페이지" showBottomNav><PlaceholderPage title="내 페이지" /></AppShell>} />
+      <Route path="/archive" element={<AuthenticatedRoute><ArchivePage /></AuthenticatedRoute>} />
+      <Route path="/archive/saved-places" element={<AuthenticatedRoute><SavedPlacesPage /></AuthenticatedRoute>} />
+      <Route path="/archive/activities" element={<AuthenticatedRoute><MyActivityPage /></AuthenticatedRoute>} />
+      <Route path="/archive/manage" element={<AuthenticatedRoute><ReviewManagementPage /></AuthenticatedRoute>} />
+      <Route path="/archive/journal/:journalId" element={<AuthenticatedRoute><JournalDetailPage /></AuthenticatedRoute>} />
+      <Route path="/archive/journal" element={<AuthenticatedRoute><JournalDetailPage /></AuthenticatedRoute>} />
+      <Route path="/my-page" element={<AuthenticatedRoute><MyPagePage /></AuthenticatedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
