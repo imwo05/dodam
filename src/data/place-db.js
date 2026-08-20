@@ -53,7 +53,7 @@ function parseCsvLine(line) {
   let quoted = false;
   for (let i = 0; i < line.length; i += 1) {
     const char = line[i];
-    if (char === '"' && line[i + 1] === '"') { cell += '"'; i += 1; }
+    if (char === '"' && quoted && line[i + 1] === '"') { cell += '"'; i += 1; }
     else if (char === '"') quoted = !quoted;
     else if (char === ',' && !quoted) { cells.push(cell); cell = ''; }
     else cell += char;

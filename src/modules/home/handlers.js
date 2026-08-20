@@ -1,4 +1,5 @@
 import { requireAuth } from '../auth/service.js';
+import { distanceKm } from '../../lib/geo.js';
 
 export async function getHome(context) {
   const user = requireAuth(context);
@@ -18,7 +19,7 @@ export async function getHome(context) {
   let places = store.listPlaces({});
   if (lat != null && lng != null) {
     places = places
-      .map((p) => ({ p, d: Math.hypot(lat - (p.latitude ?? 999), lng - (p.longitude ?? 999)) }))
+      .map((p) => ({ p, d: distanceKm(lat, lng, p.latitude, p.longitude) }))
       .sort((a, b) => a.d - b.d)
       .map((x) => x.p);
   }

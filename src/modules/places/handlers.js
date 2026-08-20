@@ -1,4 +1,5 @@
 import { ApiError } from '../../lib/errors.js';
+import { distanceKm } from '../../lib/geo.js';
 import { assertRequiredString } from '../../lib/validation.js';
 import { optionalAuth, requireAuth } from '../auth/service.js';
 
@@ -115,7 +116,7 @@ export async function searchPlaces(context) {
   let places = context.store.listPlaces({ keyword });
   if (lat != null && lng != null) {
     places = places
-      .map((p) => ({ p, d: distance(lat, lng, p.latitude, p.longitude) }))
+      .map((p) => ({ p, d: distanceKm(lat, lng, p.latitude, p.longitude) }))
       .sort((a, b) => a.d - b.d)
       .map((x) => x.p);
   }
@@ -154,7 +155,7 @@ export async function getRealtimeRecommendations(context) {
   let places = context.store.listPlaces({});
   if (lat != null && lng != null) {
     places = places
-      .map((p) => ({ p, d: distance(lat, lng, p.latitude, p.longitude) }))
+      .map((p) => ({ p, d: distanceKm(lat, lng, p.latitude, p.longitude) }))
       .sort((a, b) => a.d - b.d)
       .map((x) => x.p);
   }
@@ -207,13 +208,6 @@ function validateCreatePlace(body, { partial = false } = {}) {
     out.imageUrls = body.imageUrls.map((u) => assertRequiredString(u, 'imageUrls[]', { min: 1, max: 2048 }));
   }
   return out;
-}
-
-function distance(lat1, lng1, lat2, lng2) {
-  if (lat2 == null || lng2 == null) return Number.POSITIVE_INFINITY;
-  const dLat = lat1 - lat2;
-  const dLng = lng1 - lng2;
-  return Math.sqrt(dLat * dLat + dLng * dLng);
 }
 
 function addMinutes(hhmm, minutes) {

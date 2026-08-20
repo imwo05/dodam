@@ -1,4 +1,5 @@
 import { ApiError } from '../../lib/errors.js';
+import { distanceKm } from '../../lib/geo.js';
 import { requireAuth } from '../auth/service.js';
 
 const CONDITIONS = new Set(['VERY_GOOD', 'GOOD', 'NORMAL', 'TIRED', 'VERY_TIRED']);
@@ -229,9 +230,14 @@ async function rankPlaces(context, input, availableMinutes, excludeIds) {
     (p) => !exclude.has(p.id) && (p.durationMinutes == null || p.durationMinutes <= availableMinutes)
   );
 
+  const hasLocation = Number.isFinite(input.location?.latitude) && Number.isFinite(input.location?.longitude);
   const scored = candidates
-    .map((place) => ({ place, score: scorePlace(place, input, availableMinutes) }))
-    .sort((a, b) => b.score - a.score)
+    .map((place) => ({
+      place,
+      score: scorePlace(place, input, availableMinutes),
+      distanceKm: hasLocation ? distanceKm(input.location.latitude, input.location.longitude, place.latitude, place.longitude) : null
+    }))
+    .sort((a, b) => hasLocation ? a.distanceKm - b.distanceKm || b.score - a.score : b.score - a.score)
     .slice(0, 5);
 
   // 이유 생성 (AI → 폴백)
@@ -262,7 +268,7 @@ async function rankPlaces(context, input, availableMinutes, excludeIds) {
       : '남은 시간 안에 기분 좋게 다녀올 수 있는 장소를 골랐어요.');
 
   const items = scored.map((s) => ({
-    place: serializePlace(s.place),
+    place: { ...serializePlace(s.place), distanceKm: s.distanceKm == null ? null : Math.round(s.distanceKm * 10) / 10 },
     score: Math.round(s.score * 100) / 100,
     reason: reasonMap.get(s.place.id) ?? fallbackReason(s.place, input)
   }));
@@ -288,11 +294,6 @@ function scorePlace(place, input, availableMinutes) {
   // 계획 유지 수준
   if (input.continuityMode === 'MINIMUM' && place.durationMinutes != null && place.durationMinutes <= 25) score += 0.1;
   if (input.continuityMode === 'EASY' && LOW_INTENSITY.has(place.activityType)) score += 0.1;
-  // 근접성
-  if (input.location?.latitude != null && place.latitude != null) {
-    const d = Math.hypot(input.location.latitude - place.latitude, input.location.longitude - place.longitude);
-    score += Math.max(0, 0.1 - d); // 가까울수록 최대 +0.1
-  }
   return Math.max(0, Math.min(1, score));
 }
 

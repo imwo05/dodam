@@ -12,6 +12,10 @@
 
 현재 모든 행은 `CANDIDATE` 또는 `DRAFT`입니다. 주소·좌표는 API와 현장 답사로 확인하기 전까지 추천 운영 데이터로 승격하지 않습니다. `image_url`은 저작권과 대표성 검토가 끝난 뒤에만 입력합니다.
 
+## 추천 활용
+
+Point와 Experience의 `mood_tags`는 성향·자기관리 고민·상황을 연결하는 추천 보조 신호입니다. 태그 규칙은 [recommendation-tags.md](recommendation-tags.md)에 정리되어 있습니다. 현재 위치가 전달되면 추천 API는 Point의 `latitude`·`longitude`와 GPS 좌표의 직선거리(km)를 계산해, 카테고리·시간 조건을 통과한 후보 중 가까운 장소를 우선 정렬합니다. GPS 좌표는 추천 요청 시점에만 사용하며 DB에 사용자 위치를 저장하지 않습니다.
+
 ```bash
 npm run validate:place-db
 ```
