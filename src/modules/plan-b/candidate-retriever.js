@@ -28,7 +28,7 @@ function retrieveCandidatesFromPlaces({ places, planContext, routeProvider, dist
 
   const candidates = places
     .filter((place) => (place.status ?? 'ACTIVE') === 'ACTIVE')
-    .filter((place) => !excluded.has(place.id))
+    .filter((place) => !excluded.has(String(place.id)))
     .filter((place) => isRelevantCategory(place, requestedCategory))
     .filter((place) => isIntensityCompatible(place, planContext.condition))
     .map((place) => {

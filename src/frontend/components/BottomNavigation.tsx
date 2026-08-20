@@ -16,7 +16,7 @@ export function BottomNavigation({ active }: { active?: string }) {
       <div className="bottom-navigation__art" aria-hidden="true" />
       <div className="bottom-navigation__icons">
         {items.map((item) => (
-          <Link className={`bottom-navigation__item ${item.label === active ? 'is-active' : ''}`} to={item.to} key={item.label}>
+          <Link className={`bottom-navigation__item ${item.label === active ? 'is-active' : ''}`} to={item.to} state={item.to === '/plan-b' ? { planBEntry: 'new' } : undefined} key={item.label}>
             <img className={`bottom-navigation__icon ${item.iconClass}`} src={`/assets/${item.icon}`} alt="" />
             <span>{item.label}</span>
           </Link>

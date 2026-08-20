@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { createJournal, createPlaceReview, createPlanBRecommendations, completePlanBStop, getPlaceDetail, getPlanBSession, removePlanBStop, reorderPlanBStops, skipPlanBStop, startPlanB, startPlanBStop, type PlanBCategory, type PlanBCondition, type PlanBContinuityMode, type PlanBInput as ApiPlanBInput, type PlanBResponse, type PlanBStop } from '../../api/planB';
+import { createJournal, createPlaceReview, createPlanBRecommendations, completePlanBStop, getPlaceDetail, getPlanBSession, regeneratePlanBRecommendations, removePlanBStop, reorderPlanBStops, skipPlanBStop, startPlanB, startPlanBStop, type PlanBCategory, type PlanBCondition, type PlanBContinuityMode, type PlanBInput as ApiPlanBInput, type PlanBResponse, type PlanBStop } from '../../api/planB';
 import { getOnboardingOptions, type OnboardingOptions } from '../../api/onboarding';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePlanB, type PlanBInput as StoredPlanBInput } from '../../contexts/PlanBContext';
@@ -20,6 +20,22 @@ const INVALID_TIME_RANGE_MESSAGE = '종료 시간은 시작 시간보다 늦게 
 
 function labelFor(value: string, labels: Record<string, string>) { return labels[value] ?? value; }
 function requestError(error: unknown, fallback: string) { return error instanceof Error ? error.message : fallback; }
+function uniquePlaceIds(placeIds: string[]) { return [...new Set(placeIds.map(String).filter(Boolean))]; }
+type PlanBRouteState = { planBEntry?: 'new' | 'continue' };
+
+function newInputValues(initial: Partial<StoredPlanBInput> = {}): StoredPlanBInput {
+  return {
+    date: initial.date || todayKey(),
+    startTime: initial.startTime || '13:00',
+    endTime: initial.endTime || '14:00',
+    selfCareCategory: initial.selfCareCategory || '',
+    customCategory: initial.customCategory || '',
+    condition: initial.condition || '',
+    continuityMode: initial.continuityMode || '',
+    currentLocation: initial.currentLocation ?? null,
+    brokenScheduleId: initial.brokenScheduleId ?? null
+  };
+}
 
 function SurfaceSelect({ id, label, value, options, placeholder, onChange, disabled = false }: { id: string; label: string; value: string; options: Array<{ value: string; label: string }>; placeholder: string; onChange: (value: string) => void; disabled?: boolean }) {
   return <div className={`plan-b-surface-select ${value ? 'is-selected' : ''}`}><img src={value ? '/assets/onboarding-selected-surface.png' : '/assets/onboarding-option-surface.png'} alt="" aria-hidden="true" /><select id={id} aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled}><option value="">{placeholder}</option>{options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select><span aria-hidden="true">⌄</span></div>;
@@ -38,18 +54,21 @@ function PageLoading() { return <p className="plan-b-empty" role="status">Plan B
 
 export function PlanBEntryPage() {
   const { accessToken } = useAuth();
+  const routerLocation = useLocation();
+  const { startNewPlanB } = usePlanB();
   const [places, setPlaces] = useState<Place[]>([]);
   const [bounds, setBounds] = useState<MapBounds | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  useEffect(() => { startNewPlanB(); }, [routerLocation.key, startNewPlanB]);
   useEffect(() => {
     let active = true;
     setLoading(true);
     getMapPlaces(accessToken ?? undefined, bounds).then((response) => { if (active) setPlaces(response.places); }).catch((requestErrorValue) => { if (active) setError(requestError(requestErrorValue, '장소를 불러오지 못했어요.')); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [accessToken, bounds]);
-  return <AppShell className="product-shell plan-b-shell" activeNav="Plan B" showBottomNav><main className="plan-b-screen plan-b-entry-screen"><PageHeader title="Plan B" backTo="/home" className="page-header--product" /><section className="plan-b-entry-copy"><p className="product-eyebrow">계획이 바뀐 순간</p><h1>오늘 가능한<br />다른 선택을 찾아볼까요?</h1><p>남은 시간과 컨디션을 알려주면 담이가 지금 할 수 있는 Plan B를 추천해요.</p></section><MapView mode="EXPLORE" places={places} className="plan-b-map-boundary" ariaLabel="Plan B 장소 지도 영역" onBoundsChange={setBounds} onPlaceSelect={(place) => navigate(`/places/${place.id}`)} isLoading={loading} error={error} /><p className="plan-b-map-note">장소를 누르면 상세 정보를 확인할 수 있어요.</p><Link className="tape-button plan-b-primary-action" to="/plan-b/input"><img src="/assets/tape-primary.png" alt="" aria-hidden="true" /><span>Plan B 시작하기</span></Link></main></AppShell>;
+  return <AppShell className="product-shell plan-b-shell" activeNav="Plan B" showBottomNav><main className="plan-b-screen plan-b-entry-screen"><PageHeader title="Plan B" backTo="/home" className="page-header--product" /><section className="plan-b-entry-copy"><p className="product-eyebrow">계획이 바뀐 순간</p><h1>오늘 가능한<br />다른 선택을 찾아볼까요?</h1><p>남은 시간과 컨디션을 알려주면 담이가 지금 할 수 있는 Plan B를 추천해요.</p></section><MapView mode="EXPLORE" places={places} className="plan-b-map-boundary" ariaLabel="Plan B 장소 지도 영역" onBoundsChange={setBounds} onPlaceSelect={(place) => navigate(`/places/${place.id}`)} isLoading={loading} error={error} /><p className="plan-b-map-note">장소를 누르면 상세 정보를 확인할 수 있어요.</p><Link className="tape-button plan-b-primary-action" to="/plan-b/input" state={{ planBEntry: 'new' }}><img src="/assets/tape-primary.png" alt="" aria-hidden="true" /><span>Plan B 시작하기</span></Link></main></AppShell>;
 }
 
 function TimeField({ id, label, value, minCanonical, onChange, onOpen }: { id: string; label: string; value: string; minCanonical?: string | null; onChange: (value: string) => void; onOpen?: () => void }) {
@@ -61,10 +80,16 @@ export function PlanBInputPage() {
   const navigate = useNavigate();
   const routerLocation = useLocation();
   const { accessToken } = useAuth();
-  const { input, setInput } = usePlanB();
+  const { input, setInput, startNewPlanB, recordShownPlaces } = usePlanB();
   const [options, setOptions] = useState<OnboardingOptions | null>(null);
   const query = useMemo(() => new URLSearchParams(routerLocation.search), [routerLocation.search]);
-  const [values, setValues] = useState<StoredPlanBInput>(() => ({ date: input.date || query.get('date') || todayKey(), startTime: input.startTime || '13:00', endTime: input.endTime || '14:00', selfCareCategory: input.selfCareCategory, customCategory: input.customCategory, condition: input.condition, continuityMode: input.continuityMode, currentLocation: input.currentLocation, brokenScheduleId: input.brokenScheduleId ?? query.get('brokenScheduleId') }));
+  const routeState = routerLocation.state as PlanBRouteState | null;
+  const continuingFlow = routeState?.planBEntry === 'continue' || query.get('flow') === 'continue';
+  const entryContext = useMemo(() => ({
+    ...(query.get('date') ? { date: query.get('date') ?? '' } : {}),
+    ...(query.get('brokenScheduleId') ? { brokenScheduleId: query.get('brokenScheduleId') } : {})
+  }), [query]);
+  const [values, setValues] = useState<StoredPlanBInput>(() => newInputValues(continuingFlow ? input : entryContext));
   const [loading, setLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [error, setError] = useState('');
@@ -73,6 +98,14 @@ export function PlanBInputPage() {
   const [locationMessage, setLocationMessage] = useState('');
 
   useEffect(() => { getOnboardingOptions().then(setOptions).catch((requestErrorValue) => setOptionsError(requestError(requestErrorValue, 'Plan B 선택지를 불러오지 못했어요.'))); }, []);
+  useEffect(() => {
+    if (continuingFlow) return;
+    startNewPlanB(entryContext);
+    setValues(newInputValues(entryContext));
+    setError('');
+    setTimeError('');
+    setLocationMessage('');
+  }, [continuingFlow, entryContext, startNewPlanB]);
   function update<K extends keyof StoredPlanBInput>(key: K, value: StoredPlanBInput[K]) { setValues((current) => ({ ...current, [key]: value })); setError(''); }
   function updateStartTime(next: string) {
     const hasEndTime = Boolean(values.endTime);
@@ -108,7 +141,8 @@ export function PlanBInputPage() {
     if (values.selfCareCategory === 'CUSTOM' && !values.customCategory.trim()) { setError('직접 입력할 자기관리 활동을 적어 주세요.'); return; }
     setLoading(true); setTimeError(''); setError('');
     const request: ApiPlanBInput = { date: values.date, startTime: values.startTime, endTime: values.endTime, brokenScheduleId: values.brokenScheduleId ?? null, selfCareCategory: values.selfCareCategory as PlanBCategory, customCategory: values.selfCareCategory === 'CUSTOM' ? values.customCategory.trim() : null, condition: values.condition as PlanBCondition, continuityMode: values.continuityMode as PlanBContinuityMode, location: values.currentLocation ? { latitude: values.currentLocation.lat, longitude: values.currentLocation.lng } : null };
-    try { const response = await createPlanBRecommendations(accessToken, request); setInput({ ...values, date: response.date || values.date }); navigate(`/plan-b/${response.sessionId}/recommendations`); }
+    startNewPlanB(values);
+    try { const response = await createPlanBRecommendations(accessToken, request); setInput({ ...values, date: response.date || values.date }); recordShownPlaces(response.sessionId, response.course.stops.map((stop) => stop.place.id)); navigate(`/plan-b/${response.sessionId}/recommendations`); }
     catch (requestErrorValue) { setError(requestError(requestErrorValue, '추천을 만들지 못했어요.')); }
     finally { setLoading(false); }
   }
@@ -150,15 +184,17 @@ function StopOption({ stop, selected, onToggle }: { stop: PlanBStop; selected: b
 export function PlanBRecommendationsPage() {
   const { sessionId = '' } = useParams();
   const { accessToken } = useAuth();
+  const { seenPlaceIds, recordShownPlaces, resumePlanB } = usePlanB();
   const navigate = useNavigate();
   const [session, setSession] = useState<PlanBResponse | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  useEffect(() => { if (!accessToken || !sessionId) return; getPlanBSession(accessToken, sessionId).then((response) => { setSession(response); setSelectedIds(response.course.stops.map((stop) => stop.id)); }).catch((requestErrorValue) => setError(requestError(requestErrorValue, '추천을 불러오지 못했어요.'))).finally(() => setLoading(false)); }, [accessToken, sessionId]);
+  useEffect(() => { if (!accessToken || !sessionId) return; getPlanBSession(accessToken, sessionId).then((response) => { resumePlanB(response.sessionId); recordShownPlaces(response.sessionId, response.course.stops.map((stop) => stop.place.id)); setSession(response); setSelectedIds(response.course.stops.map((stop) => stop.id)); }).catch((requestErrorValue) => setError(requestError(requestErrorValue, '추천을 불러오지 못했어요.'))).finally(() => setLoading(false)); }, [accessToken, recordShownPlaces, resumePlanB, sessionId]);
   async function confirm() { if (!accessToken || !session || !selectedIds.length) { setError('최소 한 곳은 선택해 주세요.'); return; } setSaving(true); setError(''); try { let next = session; for (const stop of session.course.stops.filter((stop) => !selectedIds.includes(stop.id))) next = await removePlanBStop(accessToken, session.sessionId, stop.id); setSession(next); navigate(`/plan-b/${session.sessionId}/course`); } catch (requestErrorValue) { setError(requestError(requestErrorValue, '추천 선택을 저장하지 못했어요.')); } finally { setSaving(false); } }
-  return <AppShell className="product-shell plan-b-shell" activeNav="Plan B" showBottomNav><main className="plan-b-screen plan-b-recommendations-screen"><PageHeader title="추천 결과" backTo="/plan-b/input" className="page-header--product" />{loading ? <PageLoading /> : session ? <><GoalSummary session={session} /><DamiStateCard session={session} /><section className="plan-b-list-section"><div className="plan-b-list-heading"><div><p className="plan-b-section-label">추천 장소</p><h2>함께할 장소를 골라 주세요</h2></div><span>{selectedIds.length}/{session.course.stops.length}</span></div>{session.course.stops.length ? session.course.stops.map((stop) => <StopOption key={stop.id} stop={stop} selected={selectedIds.includes(stop.id)} onToggle={() => setSelectedIds((current) => current.includes(stop.id) ? (current.length === 1 ? current : current.filter((id) => id !== stop.id)) : [...current, stop.id])} />) : <p className="plan-b-empty">조건에 맞는 추천 장소가 없어요.</p>}</section>{error ? <PageError message={error} /> : null}<button type="button" className="tape-button plan-b-primary-action" onClick={() => void confirm()} disabled={saving || !session.course.stops.length}><img src="/assets/tape-primary.png" alt="" aria-hidden="true" /><span>{saving ? '저장 중' : '이 장소들로 구성하기'}</span></button></> : <PageError message={error || '추천을 찾지 못했어요.'} />}</main></AppShell>;
+  async function regenerate() { if (!accessToken || !session) return; setSaving(true); setError(''); const currentPlaceIds = session.course.stops.map((stop) => stop.place.id); try { const next = await regeneratePlanBRecommendations(accessToken, session.sessionId, uniquePlaceIds([...seenPlaceIds, ...currentPlaceIds])); setSession(next); setSelectedIds(next.course.stops.map((stop) => stop.id)); recordShownPlaces(next.sessionId, next.course.stops.map((stop) => stop.place.id)); } catch (requestErrorValue) { setError(requestError(requestErrorValue, '새로운 추천을 만들지 못했어요.')); } finally { setSaving(false); } }
+  return <AppShell className="product-shell plan-b-shell" activeNav="Plan B" showBottomNav><main className="plan-b-screen plan-b-recommendations-screen"><PageHeader title="추천 결과" backTo="/plan-b/input?flow=continue" className="page-header--product" />{loading ? <PageLoading /> : session ? <><GoalSummary session={session} /><DamiStateCard session={session} /><section className="plan-b-list-section"><div className="plan-b-list-heading"><div><p className="plan-b-section-label">추천 장소</p><h2>함께할 장소를 골라 주세요</h2></div><span>{selectedIds.length}/{session.course.stops.length}</span></div>{session.course.stops.length ? session.course.stops.map((stop) => <StopOption key={stop.id} stop={stop} selected={selectedIds.includes(stop.id)} onToggle={() => setSelectedIds((current) => current.includes(stop.id) ? (current.length === 1 ? current : current.filter((id) => id !== stop.id)) : [...current, stop.id])} />) : <p className="plan-b-empty">조건에 맞는 추천 장소가 없어요.</p>}</section>{error ? <PageError message={error} /> : null}<button type="button" className="plan-b-outline-action" onClick={() => void regenerate()} disabled={saving || !session.course.stops.length}>{saving ? '추천을 바꾸는 중' : '다른 추천 보기'}</button><button type="button" className="tape-button plan-b-primary-action" onClick={() => void confirm()} disabled={saving || !session.course.stops.length}><img src="/assets/tape-primary.png" alt="" aria-hidden="true" /><span>{saving ? '저장 중' : '이 장소들로 구성하기'}</span></button></> : <PageError message={error || '추천을 찾지 못했어요.'} />}</main></AppShell>;
 }
 
 function CourseStop({ stop, index, total, editable, onRemove, onMove }: { stop: PlanBStop; index: number; total: number; editable: boolean; onRemove: () => void; onMove: (direction: -1 | 1) => void }) {
@@ -168,12 +204,13 @@ function CourseStop({ stop, index, total, editable, onRemove, onMove }: { stop: 
 export function PlanBCoursePage() {
   const { sessionId = '' } = useParams();
   const { accessToken } = useAuth();
+  const { resumePlanB } = usePlanB();
   const navigate = useNavigate();
   const [session, setSession] = useState<PlanBResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
-  useEffect(() => { if (!accessToken || !sessionId) return; getPlanBSession(accessToken, sessionId).then(setSession).catch((requestErrorValue) => setError(requestError(requestErrorValue, '코스를 불러오지 못했어요.'))).finally(() => setLoading(false)); }, [accessToken, sessionId]);
+  useEffect(() => { if (!accessToken || !sessionId) return; getPlanBSession(accessToken, sessionId).then((response) => { resumePlanB(response.sessionId); setSession(response); }).catch((requestErrorValue) => setError(requestError(requestErrorValue, '코스를 불러오지 못했어요.'))).finally(() => setLoading(false)); }, [accessToken, resumePlanB, sessionId]);
   async function remove(stopId: string) { if (!accessToken || !session || session.course.stops.length <= 1) return; setActionLoading(true); try { setSession(await removePlanBStop(accessToken, session.sessionId, stopId)); } catch (requestErrorValue) { setError(requestError(requestErrorValue, '장소를 삭제하지 못했어요.')); } finally { setActionLoading(false); } }
   async function move(index: number, direction: -1 | 1) { if (!accessToken || !session) return; const next = [...session.course.stops]; const target = index + direction; if (target < 0 || target >= next.length) return; [next[index], next[target]] = [next[target], next[index]]; setActionLoading(true); try { setSession(await reorderPlanBStops(accessToken, session.sessionId, next.map((stop) => stop.id))); } catch (requestErrorValue) { setError(requestError(requestErrorValue, '코스 순서를 저장하지 못했어요.')); } finally { setActionLoading(false); } }
   async function begin() { if (!accessToken || !session) return; if (session.status === 'IN_PROGRESS') { navigate(`/plan-b/${session.sessionId}/execute`); return; } setActionLoading(true); try { await startPlanB(accessToken, session.sessionId); navigate(`/plan-b/${session.sessionId}/execute`); } catch (requestErrorValue) { setError(requestError(requestErrorValue, 'Plan B를 시작하지 못했어요.')); } finally { setActionLoading(false); } }
@@ -181,11 +218,12 @@ export function PlanBCoursePage() {
 }
 
 function usePlanBSession(sessionId: string, accessToken: string | null) {
+  const { resumePlanB } = usePlanB();
   const [session, setSession] = useState<PlanBResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const reload = useCallback(async () => { if (!accessToken || !sessionId) return null; const next = await getPlanBSession(accessToken, sessionId); setSession(next); return next; }, [accessToken, sessionId]);
-  useEffect(() => { reload().catch((requestErrorValue) => setError(requestError(requestErrorValue, 'Plan B 정보를 불러오지 못했어요.'))).finally(() => setLoading(false)); }, [accessToken, sessionId]);
+  const reload = useCallback(async () => { if (!accessToken || !sessionId) return null; const next = await getPlanBSession(accessToken, sessionId); resumePlanB(next.sessionId); setSession(next); return next; }, [accessToken, resumePlanB, sessionId]);
+  useEffect(() => { reload().catch((requestErrorValue) => setError(requestError(requestErrorValue, 'Plan B 정보를 불러오지 못했어요.'))).finally(() => setLoading(false)); }, [reload]);
   return { session, setSession, loading, error, setError, reload };
 }
 

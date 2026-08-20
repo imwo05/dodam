@@ -154,6 +154,14 @@ export function getPlanBSession(accessToken: string, sessionId: string) {
   return apiRequest<BackendPlanBResponse>(`/plan-b/${encodeURIComponent(sessionId)}`, { headers: authHeaders(accessToken) }).then(adaptResponse);
 }
 
+export function regeneratePlanBRecommendations(accessToken: string, sessionId: string, excludePlaceIds: string[]) {
+  return apiRequest<BackendPlanBResponse>(`/plan-b/${encodeURIComponent(sessionId)}/regenerate`, {
+    method: 'POST',
+    headers: authHeaders(accessToken),
+    body: JSON.stringify({ excludePlaceIds: [...new Set(excludePlaceIds.map(String).filter(Boolean))] })
+  }).then(adaptResponse);
+}
+
 export function getPlanBCourse(accessToken: string, sessionId: string) {
   return apiRequest<BackendPlanBCourse>(`/plan-b/${encodeURIComponent(sessionId)}/course`, { headers: authHeaders(accessToken) }).then((course) => ({ ...course, stops: course.stops.map(adaptStop) }));
 }

@@ -81,6 +81,20 @@ export async function regenerate(context) {
     distanceProvider,
     excludePlaceIds: exclude
   });
+  if (!candidates.length && exclude.length) {
+    const candidatesWithoutExclusions = await retrieveCandidates({
+      store: context.store,
+      placeRepository: context.repositories?.place,
+      planContext,
+      routeProvider,
+      distanceProvider
+    });
+    if (candidatesWithoutExclusions.length) {
+      throw new ApiError(409, 'NO_UNSEEN_CANDIDATE_EXPERIENCE', '새로운 추천 장소를 더 찾지 못했습니다.', {
+        reason: 'EXCLUDED_CANDIDATES_EXHAUSTED'
+      });
+    }
+  }
   if (!candidates.length) throw noCandidateError();
 
   const generated = await generateCourse(context, session, planContext, candidates);
