@@ -179,7 +179,7 @@ export function BasicOnboardingPage() {
         planChangeReasons: selectedReasons,
         aiStyle: values.aiStyle
       });
-      navigate('/onboarding/ai');
+      navigate('/onboarding/chat');
     } catch {
       // The context retains the values and server error so the user can retry.
     }

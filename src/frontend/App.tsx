@@ -14,7 +14,7 @@ export function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/onboarding/basic" element={<BasicOnboardingPage />} />
-      <Route path="/onboarding/ai" element={<AiOnboardingPage />} />
+      <Route path="/onboarding/chat" element={<AiOnboardingPage />} />
       <Route path="/schedule/initial" element={<PlaceholderPage title="초기 일정" />} />
       <Route path="/home" element={<AppShell activeNav="홈" showBottomNav><PlaceholderPage title="홈" /></AppShell>} />
       <Route path="/schedule" element={<AppShell activeNav="일정" showBottomNav><PlaceholderPage title="일정" /></AppShell>} />
