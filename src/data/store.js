@@ -232,10 +232,12 @@ export function createStore() {
       seq.place += 1;
       const now = new Date().toISOString();
       const place = {
-        id: makeId('plc', 100 + seq.place), // 시드와 안 겹치게 100번대부터
-        creatorId: String(input.creatorId),
+        id: input.id ?? makeId('plc', 100 + seq.place), // 시드와 안 겹치게 100번대부터
+        sourceId: input.sourceId ?? null,
+        creatorId: input.creatorId == null ? null : String(input.creatorId),
         name: input.name,
-        address: input.address,
+        address: input.address ?? '',
+        district: input.district ?? null,
         geometryType: input.geometryType ?? 'POINT',
         latitude: input.latitude ?? input.pointLatitude ?? null,
         longitude: input.longitude ?? input.pointLongitude ?? null,
@@ -246,9 +248,14 @@ export function createStore() {
         endLatitude: input.endLatitude ?? null,
         endLongitude: input.endLongitude ?? null,
         encodedPolyline: input.encodedPolyline ?? null,
+        distanceMeters: input.distanceMeters ?? null,
         activityType: input.activityType ?? input.primaryCategory,
         primaryCategory: input.primaryCategory ?? input.activityType,
         experienceCategories: [...(input.experienceCategories ?? [])],
+        sourceWellnessType: input.sourceWellnessType ?? input.wellnessType ?? null,
+        wellnessType: input.wellnessType ?? input.sourceWellnessType ?? null,
+        atmosphereTags: [...(input.atmosphereTags ?? input.tags ?? [])],
+        moodTags: [...(input.moodTags ?? input.atmosphereTags ?? input.tags ?? [])],
         intensity: input.intensity ?? null,
         indoorOutdoor: input.indoorOutdoor ?? null,
         recommendedTimeBands: [...(input.recommendedTimeBands ?? [])],
@@ -256,17 +263,24 @@ export function createStore() {
         priceLevel: input.priceLevel ?? null,
         tags: [...(input.tags ?? [])],
         status: input.status ?? 'ACTIVE',
+        source: input.source ?? 'USER',
+        sourceMetadata: input.sourceMetadata ?? {},
         durationMinutes: input.durationMinutes ?? null,
         description: input.description ?? '',
         tip: input.tip ?? null,
         imageUrls: [...(input.imageUrls ?? [])],
-        createdAt: now
+        createdAt: input.createdAt ?? now,
+        updatedAt: input.updatedAt ?? now
       };
       state.places.set(place.id, place);
       return clone(place);
     },
     findPlaceById(id) {
       const p = state.places.get(String(id));
+      return p ? clone(p) : null;
+    },
+    findPlaceBySourceId(sourceId) {
+      const p = [...state.places.values()].find((place) => place.sourceId === String(sourceId));
       return p ? clone(p) : null;
     },
     listPlaces(filters = {}) {
@@ -282,12 +296,19 @@ export function createStore() {
       if (filters.bbox) {
         const { swLat, swLng, neLat, neLng } = filters.bbox;
         items = items.filter((p) => {
-          const points = p.geometryType === 'SEGMENT'
-            ? [{ latitude: p.startLatitude, longitude: p.startLongitude }, { latitude: p.endLatitude, longitude: p.endLongitude }]
-            : [{ latitude: p.pointLatitude ?? p.latitude, longitude: p.pointLongitude ?? p.longitude }];
-          return points.some((point) => point.latitude != null && point.longitude != null
-            && point.latitude >= swLat && point.latitude <= neLat
-            && point.longitude >= swLng && point.longitude <= neLng);
+          if (p.geometryType === 'SEGMENT') {
+            const minLat = Math.min(Number(p.startLatitude), Number(p.endLatitude));
+            const maxLat = Math.max(Number(p.startLatitude), Number(p.endLatitude));
+            const minLng = Math.min(Number(p.startLongitude), Number(p.endLongitude));
+            const maxLng = Math.max(Number(p.startLongitude), Number(p.endLongitude));
+            return Number.isFinite(minLat) && Number.isFinite(maxLat) && Number.isFinite(minLng) && Number.isFinite(maxLng)
+              && minLat <= neLat && maxLat >= swLat && minLng <= neLng && maxLng >= swLng;
+          }
+          const latitude = Number(p.pointLatitude ?? p.latitude);
+          const longitude = Number(p.pointLongitude ?? p.longitude);
+          return Number.isFinite(latitude) && Number.isFinite(longitude)
+            && latitude >= swLat && latitude <= neLat
+            && longitude >= swLng && longitude <= neLng;
         });
       }
       if (filters.maxDurationMinutes != null) {

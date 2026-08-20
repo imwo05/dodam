@@ -21,7 +21,13 @@ export async function createRecommendations(context) {
     user,
     input
   });
-  const candidates = retrieveCandidates({ store: context.store, planContext, routeProvider, distanceProvider });
+  const candidates = await retrieveCandidates({
+    store: context.store,
+    placeRepository: context.repositories?.place,
+    planContext,
+    routeProvider,
+    distanceProvider
+  });
   if (!candidates.length) throw noCandidateError();
 
   const session = context.store.createPlanBSession({
@@ -66,8 +72,9 @@ export async function regenerate(context) {
     ? context.body.excludePlaceIds.map(String)
     : [];
   const planContext = contextFromSession(session);
-  const candidates = retrieveCandidates({
+  const candidates = await retrieveCandidates({
     store: context.store,
+    placeRepository: context.repositories?.place,
     planContext,
     routeProvider,
     distanceProvider,
@@ -89,7 +96,7 @@ export async function addStop(context) {
   const { session } = findOwnedSession(context);
   assertSessionStatus(session, 'RECOMMENDED');
   const placeId = String(context.body.placeId ?? '');
-  const place = context.store.findPlaceById(placeId);
+  const place = await context.repositories.place.getById(placeId);
   if (!place || (place.status ?? 'ACTIVE') !== 'ACTIVE') {
     throw new ApiError(404, 'PLACE_NOT_FOUND', '장소를 찾을 수 없습니다.');
   }
@@ -181,7 +188,7 @@ export async function completeStop(context) {
     ? { ...stop, status: 'COMPLETED', completedAt }
     : { ...stop });
   if (!context.store.findActivityByPlanBStop(user.id, target.id)) {
-    const place = context.store.findPlaceById(target.placeId);
+    const place = target.placeSnapshot ?? context.store.findPlaceById(target.placeId);
     context.store.createActivity({
       userId: user.id,
       date: session.date,
@@ -300,7 +307,7 @@ function calculateCourse(session, stops, store) {
   let cursor = toMinutes(session.startTime);
   let previousLocation = currentLocation;
   const recalculated = stops.map((stop, index) => {
-    const place = store.findPlaceById(stop.placeId);
+    const place = stop.placeSnapshot ?? store.findPlaceById(stop.placeId);
     const location = placeLocation(place);
     const travelMinutes = routeProvider.getTravelTime(previousLocation, location);
     const durationMinutes = Number(stop.durationMinutes ?? place?.durationMinutes ?? 30);
@@ -345,7 +352,7 @@ function persistGeneratedPlan(store, sessionId, generated) {
   const session = store.findPlanBSession(sessionId);
   const stops = generated.stops.map((stop) => ({
     ...stop,
-    reason: generated.reasonMap.get(stop.placeId) || fallbackStopReason(store.findPlaceById(stop.placeId), session),
+    reason: generated.reasonMap.get(stop.placeId) || fallbackStopReason(stop.placeSnapshot ?? store.findPlaceById(stop.placeId), session),
     miniMission: null,
     status: stop.status ?? 'NOT_STARTED',
     startedAt: stop.startedAt ?? null,
@@ -423,7 +430,7 @@ function buildCourseResponse(session, store) {
 }
 
 function serializeStop(stop, store) {
-  const place = store.findPlaceById(stop.placeId);
+  const place = stop.placeSnapshot ?? store.findPlaceById(stop.placeId);
   return {
     id: stop.id,
     order: stop.order,
@@ -536,6 +543,7 @@ function newStopRecord(id, sessionId, placeId, place) {
     id,
     sessionId,
     placeId,
+    placeSnapshot: place ? structuredClone(place) : null,
     order: 0,
     travelMinutes: 0,
     durationMinutes: Number(place?.durationMinutes ?? 30),

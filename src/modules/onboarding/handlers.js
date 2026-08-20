@@ -16,7 +16,7 @@ export async function completeOnboarding(context) {
   else if (availableMinutes != null && availableMinutes >= 90) tendency = '여유 있게 즐기는 활동 선호';
 
   // 초기 추천: 관심 카테고리에 맞는 장소 우선, 없으면 아무거나
-  let candidates = store.listPlaces({});
+  let candidates = await context.repositories.place.list({});
   if (selfCareAreas.length) {
     const matched = candidates.filter((p) => selfCareAreas.includes(p.activityType));
     if (matched.length) candidates = matched;

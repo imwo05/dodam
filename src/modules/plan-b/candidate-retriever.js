@@ -1,15 +1,31 @@
 import { placeLocation } from './route-provider.js';
 
-const LOW_INTENSITY_CATEGORIES = new Set(['WALK', 'MENTAL_HEALTH', 'DIET']);
-const HIGH_INTENSITY_CATEGORIES = new Set(['RUNNING', 'EXERCISE']);
+export function retrieveCandidates({ store, placeRepository, planContext, routeProvider, distanceProvider, excludePlaceIds = [] }) {
+  if (placeRepository) {
+    return placeRepository.list({}).then((places) => retrieveCandidatesFromPlaces({
+      places,
+      planContext,
+      routeProvider,
+      distanceProvider,
+      excludePlaceIds
+    }));
+  }
+  return retrieveCandidatesFromPlaces({
+    places: store.listPlaces({}),
+    planContext,
+    routeProvider,
+    distanceProvider,
+    excludePlaceIds
+  });
+}
 
-export function retrieveCandidates({ store, planContext, routeProvider, distanceProvider, excludePlaceIds = [] }) {
+function retrieveCandidatesFromPlaces({ places, planContext, routeProvider, distanceProvider, excludePlaceIds = [] }) {
   const excluded = new Set(excludePlaceIds.map(String));
   const currentLocation = planContext.currentLocation;
   const requestedCategory = planContext.selfCareCategory;
   const usableMinutes = planContext.availableWindow.usableMinutes;
 
-  const candidates = store.listPlaces({})
+  const candidates = places
     .filter((place) => (place.status ?? 'ACTIVE') === 'ACTIVE')
     .filter((place) => !excluded.has(place.id))
     .filter((place) => isRelevantCategory(place, requestedCategory))
@@ -25,7 +41,7 @@ export function retrieveCandidates({ store, planContext, routeProvider, distance
         categories: place.experienceCategories?.length ? place.experienceCategories : [place.activityType],
         category: place.activityType,
         durationMinutes,
-        intensity: place.intensity ?? inferredIntensity(place.activityType),
+        intensity: place.intensity ?? null,
         indoorOutdoor: place.indoorOutdoor ?? null,
         tags: place.tags ?? [],
         travelFromCurrentMinutes,
@@ -60,19 +76,13 @@ function isIntensityCompatible(place, condition) {
   return true;
 }
 
-function inferredIntensity(category) {
-  if (LOW_INTENSITY_CATEGORIES.has(category)) return 'LOW';
-  if (HIGH_INTENSITY_CATEGORIES.has(category)) return 'HIGH';
-  return null;
-}
-
 function scoreCandidate(place, planContext, travelFromCurrentMinutes, requiredMinutes) {
   let score = 0.5;
   if (planContext.selfCareCategory && place.activityType === planContext.selfCareCategory) score += 0.25;
   if ((planContext.condition === 'TIRED' || planContext.condition === 'VERY_TIRED')
-      && inferredIntensity(place.activityType) === 'LOW') score += 0.15;
+      && place.intensity === 'LOW') score += 0.15;
   if ((planContext.continuityMode === 'EASY' || planContext.continuityMode === 'MINIMUM')
-      && inferredIntensity(place.activityType) === 'LOW') score += 0.1;
+      && place.intensity === 'LOW') score += 0.1;
   if (travelFromCurrentMinutes <= 10) score += 0.1;
   if (requiredMinutes <= planContext.availableWindow.usableMinutes * 0.6) score += 0.05;
   score += preferenceScore(place, planContext.personalization ?? planContext.profile);
@@ -109,5 +119,5 @@ function matchesAny(place, preferences = []) {
 }
 
 function candidateIntensity(place) {
-  return place.intensity ?? inferredIntensity(place.activityType);
+  return place.intensity ?? null;
 }

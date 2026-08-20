@@ -15,7 +15,7 @@ export async function getHome(context) {
     selfCareCategory: s.selfCareCategory
   }));
 
-  let places = store.listPlaces({});
+  let places = await context.repositories.place.list({});
   if (lat != null && lng != null) {
     places = places
       .map((p) => ({
@@ -39,11 +39,12 @@ export async function getHome(context) {
       realtimeRecommendedPlaces: places.slice(0, 5).map((p) => ({
         id: p.id,
         name: p.name,
-        category: p.activityType,
+        category: p.primaryCategory ?? p.activityType,
         imageUrl: p.imageUrls?.[0] ?? null,
-        durationMinutes: p.durationMinutes
+        durationMinutes: p.durationMinutes ?? null,
+        geometryType: p.geometryType ?? 'POINT'
       })),
-      savedPlaces: store.listSavedPlaces(user.id).map((p) => ({
+      savedPlaces: (await context.repositories.place.getSavedPlaces(user.id)).map((p) => ({
         id: p.id,
         name: p.name,
         imageUrl: p.imageUrls?.[0] ?? null
