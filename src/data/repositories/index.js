@@ -19,7 +19,7 @@ export function createRepositories({
   const configured = Boolean(supabaseUrl && supabaseServiceRoleKey);
   const requested = adapter?.toLowerCase();
 
-  if (!supabaseClient && (requested === 'supabase' || (nodeEnv === 'production' && !configured))) {
+  if (!supabaseClient && ((requested === 'supabase' || nodeEnv === 'production') && !configured)) {
     throw new Error(
       'Supabase persistence is required in production. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.'
     );
