@@ -1,6 +1,7 @@
 import { ApiError } from '../../lib/errors.js';
 import { assertRequiredString } from '../../lib/validation.js';
 import { requireAuth } from '../auth/service.js';
+import { fallbackOnboardingTurn } from '../../../ai-service/onboarding.js';
 import {
   canCompleteProfile,
   missingRequiredSlots,
@@ -109,7 +110,7 @@ async function requestTurn(context, user, profile, messages) {
   }
   const validated = validateAiTurn(result);
   if (validated) return validated;
-  return safeFallbackTurn(profile, messages);
+  return safeFallbackTurn(profile, messages, user);
 }
 
 function validateAiTurn(value) {
@@ -130,17 +131,12 @@ function validateAiTurn(value) {
   }
 }
 
-function safeFallbackTurn(profile, messages) {
-  const missingSlots = missingRequiredSlots(profile, profile);
-  return {
-    assistantMessage: messages.length
-      ? '지금 답변을 안전하게 저장했어요. 잠시 후 다시 이어서 말씀해 주세요.'
-      : '요즘, 나를 위해 가장 챙기고 싶은 건 무엇인가요?',
-    extractedProfilePatch: {},
-    missingSlots,
-    completed: false,
-    fallback: true
-  };
+function safeFallbackTurn(profile, messages, user) {
+  return fallbackOnboardingTurn({
+    context: { aiStyle: profile?.aiStyle ?? user?.aiStyle ?? 'F' },
+    profile,
+    messages
+  });
 }
 
 async function ensureProfile(context, user) {
