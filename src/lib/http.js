@@ -55,7 +55,8 @@ export function sendError(res, error) {
       success: false,
       error: {
         code: apiError.code,
-        message: apiError.message
+        message: apiError.message,
+        ...(apiError.details === undefined ? {} : { details: apiError.details })
       }
     })
   );

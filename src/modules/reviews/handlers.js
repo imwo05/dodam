@@ -21,7 +21,7 @@ function serializeReview(review, store, viewer) {
 
 export async function createReview(context) {
   const user = requireAuth(context);
-  const place = context.store.findPlaceById(context.params.placeId);
+  const place = await context.repositories.place.getById(context.params.placeId);
   if (!place) throw new ApiError(404, 'PLACE_NOT_FOUND', '장소를 찾을 수 없습니다.');
 
   const reaction = String(context.body.reaction ?? '').toUpperCase();
@@ -48,7 +48,7 @@ export async function createReview(context) {
 }
 
 export async function listPlaceReviews(context) {
-  const place = context.store.findPlaceById(context.params.placeId);
+  const place = await context.repositories.place.getById(context.params.placeId);
   if (!place) throw new ApiError(404, 'PLACE_NOT_FOUND', '장소를 찾을 수 없습니다.');
   const limit = Math.min(Number(context.query.limit ?? 20) || 20, 100);
   const all = context.store.listReviewsByPlace(place.id);
@@ -82,8 +82,8 @@ export async function deleteReview(context) {
 
 export async function listMyReviews(context) {
   const user = requireAuth(context);
-  const reviews = context.store.listReviewsByUser(user.id).map((r) => {
-    const place = context.store.findPlaceById(r.placeId);
+  const reviews = await Promise.all(context.store.listReviewsByUser(user.id).map(async (r) => {
+    const place = await context.repositories.place.getById(r.placeId);
     return {
       id: r.id,
       reaction: r.reaction,
@@ -91,7 +91,7 @@ export async function listMyReviews(context) {
       place: place ? { id: place.id, name: place.name, category: place.activityType } : null,
       createdAt: r.createdAt
     };
-  });
+  }));
   return { data: { reviews } };
 }
 

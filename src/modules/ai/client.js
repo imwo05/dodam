@@ -1,6 +1,7 @@
 // 통합 AI 클라이언트. ai-service 의 엔드포인트를 호출한다.
 //  - analyzeConcern: POST {base}/analyze-concern
-//  - planBReasons:   POST {base}/plan-b-reasons
+//  - planBPlan:      POST {base}/plan-b
+//  - planBReasons:   POST {base}/plan-b-reasons (legacy compatibility)
 // ai-service 가 없거나 실패하면 null 반환 → 호출부에서 로컬 폴백.
 export function buildAiClient({ baseUrl, apiKey, fetchImpl = globalThis.fetch } = {}) {
   const base =
@@ -18,6 +19,7 @@ export function buildAiClient({ baseUrl, apiKey, fetchImpl = globalThis.fetch } 
           'Content-Type': 'application/json',
           ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
         },
+        signal: typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(5000) : undefined,
         body: JSON.stringify(payload)
       });
       if (!res.ok) return null;
@@ -36,6 +38,12 @@ export function buildAiClient({ baseUrl, apiKey, fetchImpl = globalThis.fetch } 
     },
     async planBReasons(payload) {
       return call('/plan-b-reasons', payload);
+    },
+    async planBPlan(payload) {
+      return call('/plan-b', payload);
+    },
+    async onboardingTurn(payload) {
+      return call('/onboarding-turn', payload);
     }
   };
 }

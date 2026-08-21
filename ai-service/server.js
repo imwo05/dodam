@@ -3,7 +3,8 @@
 //  백엔드가 POST /analyze-concern, /plan-b-reasons 로 호출.
 import { createServer } from 'node:http';
 import { loadEnv } from './env.js';
-import { analyzeConcern, planBReasons } from './plan.js';
+import { analyzeConcern, planBPlan, planBReasons } from './plan.js';
+import { onboardingTurn } from './onboarding.js';
 import { hasOpenAI } from './openai.js';
 
 loadEnv();
@@ -24,7 +25,9 @@ function sendJson(res, status, body) {
 
 const HANDLERS = {
   '/analyze-concern': analyzeConcern,
-  '/plan-b-reasons': planBReasons
+  '/plan-b': planBPlan,
+  '/plan-b-reasons': planBReasons,
+  '/onboarding-turn': onboardingTurn
 };
 
 const server = createServer((req, res) => {
@@ -66,5 +69,5 @@ const server = createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`DODAM AI service on http://localhost:${PORT}`);
   console.log(`  OpenAI: ${hasOpenAI() ? 'ON' : 'OFF (휴리스틱 폴백)'}`);
-  console.log(`  POST /analyze-concern · /plan-b-reasons  ·  GET /health`);
+  console.log(`  POST /analyze-concern · /plan-b · /plan-b-reasons · /onboarding-turn  ·  GET /health`);
 });

@@ -1,0 +1,4 @@
+segment_id,segment_name,district,start_place_id,end_place_id,distance_m,estimated_walk_min,activity_intensity,route_description,safety_tip,mood_tags,source_status
+"sg_gwanak_037","요거트월드 샤로수길점–씨크스페셜티커피 보행 연결","관악","pt_gwanak_176","pt_gwanak_189","15","3","LOW","주소·좌표가 확인된 두 장소를 연결한 실제 보행 동선 후보입니다. 보도 상태와 도로 횡단 여부는 지도·현장 검수 전 확인이 필요합니다.","횡단보도·보도 폭·야간 조명을 확인하고, 공사·통제 구간은 우회하세요.","#산책로 #보행연결 #혼자걷기 #검수필요","CANDIDATE"
+"sg_jongno_073","미앤갤러리–갤러리자인제노 보행 연결","종로","pt_jongno_236","pt_jongno_238","22","3","LOW","주소·좌표가 확인된 두 장소를 연결한 실제 보행 동선 후보입니다. 보도 상태와 도로 횡단 여부는 지도·현장 검수 전 확인이 필요합니다.","횡단보도·보도 폭·야간 조명을 확인하고, 공사·통제 구간은 우회하세요.","#산책로 #보행연결 #혼자걷기 #검수필요","CANDIDATE"
+"sg_gwanak_003","관악문화재단 짧은 산책","관악","pt_gwanak_002","pt_gwanak_005","500","10","LOW","도서관과 아트홀 일정 사이를 걷는 구간","공연 시간에는 여유 있게 이동하세요","#문화 #신림","CANDIDATE"

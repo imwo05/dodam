@@ -1,4 +1,5 @@
 import { placesSeed, seedUsers } from './seed.js';
+import { mergePersonalizationProfile, profileForResponse } from '../modules/onboarding/profile.js';
 
 // 문자열 ID 생성기 (usr_001, plc_002 ...)
 function makeId(prefix, n) {
@@ -14,7 +15,9 @@ export function createStore() {
     stop: 0,
     review: 0,
     journal: 0,
-    activity: 0
+    activity: 0,
+    onboardingConversation: 0,
+    onboardingMessage: 0
   };
 
   const state = {
@@ -23,6 +26,8 @@ export function createStore() {
     usersByEmail: new Map(),
     selfCareProfiles: new Map(), // userId -> profile
     concerns: new Map(), // userId -> { content, analysis }
+    onboardingConversations: new Map(),
+    onboardingMessages: new Map(), // conversationId -> message rows
     schedules: new Map(),
     places: new Map(),
     savedPlaces: new Map(), // userId -> Set(placeId)
@@ -62,6 +67,7 @@ export function createStore() {
         passwordHash: input.passwordHash,
         age: input.age ?? null,
         profileImageUrl: null,
+        aiStyle: input.aiStyle === 'T' ? 'T' : 'F',
         onboardingCompleted: false,
         createdAt: now,
         updatedAt: now
@@ -103,13 +109,62 @@ export function createStore() {
     // ================= SelfCareProfile =================
     setSelfCareProfile(userId, profile) {
       const existing = state.selfCareProfiles.get(String(userId)) ?? {};
-      const merged = { ...existing, ...profile, userId: String(userId), updatedAt: new Date().toISOString() };
+      const merged = {
+        ...mergePersonalizationProfile(existing, profile),
+        userId: String(userId),
+        updatedAt: new Date().toISOString()
+      };
       state.selfCareProfiles.set(String(userId), merged);
+      const user = state.users.get(String(userId));
+      if (user && merged.aiStyle) user.aiStyle = merged.aiStyle === 'T' ? 'T' : 'F';
       return clone(merged);
     },
     getSelfCareProfile(userId) {
       const p = state.selfCareProfiles.get(String(userId));
-      return p ? clone(p) : null;
+      return p ? clone(profileForResponse(p)) : null;
+    },
+
+    // ================= Onboarding conversations =================
+    createOnboardingConversation(input) {
+      seq.onboardingConversation += 1;
+      const now = new Date().toISOString();
+      const conversation = {
+        id: makeId('obc', seq.onboardingConversation),
+        userId: String(input.userId),
+        status: 'ACTIVE',
+        createdAt: now,
+        completedAt: null
+      };
+      state.onboardingConversations.set(conversation.id, conversation);
+      state.onboardingMessages.set(conversation.id, []);
+      return clone(conversation);
+    },
+    findOnboardingConversation(id) {
+      const conversation = state.onboardingConversations.get(String(id));
+      return conversation ? clone(conversation) : null;
+    },
+    updateOnboardingConversation(id, patch) {
+      const conversation = state.onboardingConversations.get(String(id));
+      if (!conversation) return null;
+      Object.assign(conversation, patch);
+      return clone(conversation);
+    },
+    addOnboardingMessage(input) {
+      seq.onboardingMessage += 1;
+      const message = {
+        id: makeId('obm', seq.onboardingMessage),
+        conversationId: String(input.conversationId),
+        role: input.role,
+        content: input.content,
+        createdAt: new Date().toISOString()
+      };
+      const messages = state.onboardingMessages.get(message.conversationId);
+      if (!messages) return null;
+      messages.push(message);
+      return clone(message);
+    },
+    listOnboardingMessages(conversationId) {
+      return (state.onboardingMessages.get(String(conversationId)) ?? []).map(clone);
     },
 
     setConcern(userId, concern) {
@@ -134,9 +189,17 @@ export function createStore() {
         title: input.title,
         isFixed: Boolean(input.isFixed),
         selfCareCategory: input.selfCareCategory ?? null,
+        location: input.location
+          ? {
+              latitude: input.location.latitude ?? null,
+              longitude: input.location.longitude ?? null,
+              label: input.location.label ?? null
+            }
+          : null,
         placeId: input.placeId ?? null,
         source: input.source ?? 'MANUAL',
-        createdAt: now
+        createdAt: now,
+        updatedAt: now
       };
       state.schedules.set(schedule.id, schedule);
       return clone(schedule);
@@ -157,7 +220,7 @@ export function createStore() {
     updateSchedule(id, patch) {
       const s = state.schedules.get(String(id));
       if (!s) return null;
-      Object.assign(s, patch);
+      Object.assign(s, patch, { updatedAt: new Date().toISOString() });
       return clone(s);
     },
     deleteSchedule(id) {
@@ -169,18 +232,45 @@ export function createStore() {
       seq.place += 1;
       const now = new Date().toISOString();
       const place = {
-        id: makeId('plc', 100 + seq.place), // 시드와 안 겹치게 100번대부터
-        creatorId: String(input.creatorId),
+        id: input.id ?? makeId('plc', 100 + seq.place), // 시드와 안 겹치게 100번대부터
+        sourceId: input.sourceId ?? null,
+        creatorId: input.creatorId == null ? null : String(input.creatorId),
         name: input.name,
-        address: input.address,
-        latitude: input.latitude ?? null,
-        longitude: input.longitude ?? null,
-        activityType: input.activityType,
+        address: input.address ?? '',
+        district: input.district ?? null,
+        geometryType: input.geometryType ?? 'POINT',
+        latitude: input.latitude ?? input.pointLatitude ?? null,
+        longitude: input.longitude ?? input.pointLongitude ?? null,
+        pointLatitude: input.pointLatitude ?? input.latitude ?? null,
+        pointLongitude: input.pointLongitude ?? input.longitude ?? null,
+        startLatitude: input.startLatitude ?? null,
+        startLongitude: input.startLongitude ?? null,
+        endLatitude: input.endLatitude ?? null,
+        endLongitude: input.endLongitude ?? null,
+        encodedPolyline: input.encodedPolyline ?? null,
+        distanceMeters: input.distanceMeters ?? null,
+        activityType: input.activityType ?? input.primaryCategory,
+        primaryCategory: input.primaryCategory ?? input.activityType,
+        experienceCategories: [...(input.experienceCategories ?? [])],
+        sourceWellnessType: input.sourceWellnessType ?? input.wellnessType ?? null,
+        wellnessType: input.wellnessType ?? input.sourceWellnessType ?? null,
+        atmosphereTags: [...(input.atmosphereTags ?? input.tags ?? [])],
+        moodTags: [...(input.moodTags ?? input.atmosphereTags ?? input.tags ?? [])],
+        intensity: input.intensity ?? null,
+        indoorOutdoor: input.indoorOutdoor ?? null,
+        recommendedTimeBands: [...(input.recommendedTimeBands ?? [])],
+        soloFriendly: input.soloFriendly ?? null,
+        priceLevel: input.priceLevel ?? null,
+        tags: [...(input.tags ?? [])],
+        status: input.status ?? 'ACTIVE',
+        source: input.source ?? 'USER',
+        sourceMetadata: input.sourceMetadata ?? {},
         durationMinutes: input.durationMinutes ?? null,
         description: input.description ?? '',
         tip: input.tip ?? null,
         imageUrls: [...(input.imageUrls ?? [])],
-        createdAt: now
+        createdAt: input.createdAt ?? now,
+        updatedAt: input.updatedAt ?? now
       };
       state.places.set(place.id, place);
       return clone(place);
@@ -189,10 +279,14 @@ export function createStore() {
       const p = state.places.get(String(id));
       return p ? clone(p) : null;
     },
+    findPlaceBySourceId(sourceId) {
+      const p = [...state.places.values()].find((place) => place.sourceId === String(sourceId));
+      return p ? clone(p) : null;
+    },
     listPlaces(filters = {}) {
       let items = [...state.places.values()];
       if (filters.creatorId) items = items.filter((p) => p.creatorId === String(filters.creatorId));
-      if (filters.category) items = items.filter((p) => p.activityType === filters.category);
+      if (filters.category) items = items.filter((p) => (p.primaryCategory ?? p.activityType) === filters.category);
       if (filters.keyword) {
         const kw = String(filters.keyword).toLowerCase();
         items = items.filter(
@@ -201,15 +295,21 @@ export function createStore() {
       }
       if (filters.bbox) {
         const { swLat, swLng, neLat, neLng } = filters.bbox;
-        items = items.filter(
-          (p) =>
-            p.latitude != null &&
-            p.longitude != null &&
-            p.latitude >= swLat &&
-            p.latitude <= neLat &&
-            p.longitude >= swLng &&
-            p.longitude <= neLng
-        );
+        items = items.filter((p) => {
+          if (p.geometryType === 'SEGMENT') {
+            const minLat = Math.min(Number(p.startLatitude), Number(p.endLatitude));
+            const maxLat = Math.max(Number(p.startLatitude), Number(p.endLatitude));
+            const minLng = Math.min(Number(p.startLongitude), Number(p.endLongitude));
+            const maxLng = Math.max(Number(p.startLongitude), Number(p.endLongitude));
+            return Number.isFinite(minLat) && Number.isFinite(maxLat) && Number.isFinite(minLng) && Number.isFinite(maxLng)
+              && minLat <= neLat && maxLat >= swLat && minLng <= neLng && maxLng >= swLng;
+          }
+          const latitude = Number(p.pointLatitude ?? p.latitude);
+          const longitude = Number(p.pointLongitude ?? p.longitude);
+          return Number.isFinite(latitude) && Number.isFinite(longitude)
+            && latitude >= swLat && latitude <= neLat
+            && longitude >= swLng && longitude <= neLng;
+        });
       }
       if (filters.maxDurationMinutes != null) {
         items = items.filter(
@@ -254,21 +354,35 @@ export function createStore() {
         id: makeId('pb', seq.planB),
         userId: String(input.userId),
         date: input.date,
+        brokenScheduleId: input.brokenScheduleId ?? null,
+        nextScheduleId: input.nextScheduleId ?? null,
         startTime: input.startTime,
         endTime: input.endTime,
         availableMinutes: input.availableMinutes,
+        bufferMinutes: input.bufferMinutes ?? 0,
+        usableMinutes: input.usableMinutes ?? Math.max(0, Number(input.availableMinutes ?? 0) - Number(input.bufferMinutes ?? 0)),
         selfCareCategory: input.selfCareCategory ?? null,
         customCategory: input.customCategory ?? null,
         condition: input.condition ?? null,
         continuityMode: input.continuityMode ?? null,
         latitude: input.location?.latitude ?? null,
         longitude: input.location?.longitude ?? null,
+        originalGoal: input.originalGoal ?? '',
+        aiStyle: input.aiStyle === 'T' ? 'T' : 'F',
+        reframedGoal: input.reframedGoal ?? null,
+        reframingReason: input.reframingReason ?? null,
+        courseConcept: input.courseConcept ?? '',
         status: 'RECOMMENDED',
         summary: input.summary ?? '',
+        damiState: input.damiState ?? 'DEFAULT',
+        promptVersion: input.promptVersion ?? null,
+        contextSnapshot: input.contextSnapshot ?? null,
+        finalTravel: input.finalTravel ?? null,
         recommendedPlaces: input.recommendedPlaces ?? [], // [{placeId, score, reason}]
         stops: [], // course stops
         currentStopOrder: null,
-        createdAt: now
+        createdAt: now,
+        updatedAt: now
       };
       state.planBSessions.set(session.id, session);
       return clone(session);
@@ -280,7 +394,7 @@ export function createStore() {
     updatePlanBSession(id, patch) {
       const s = state.planBSessions.get(String(id));
       if (!s) return null;
-      Object.assign(s, patch);
+      Object.assign(s, patch, { updatedAt: new Date().toISOString() });
       return clone(s);
     },
     _rawPlanBSession(id) {
@@ -402,6 +516,8 @@ export function createStore() {
         placeId: input.placeId ?? null,
         durationMinutes: input.durationMinutes ?? null,
         source: input.source ?? 'PLAN_B',
+        planBSessionId: input.planBSessionId ?? null,
+        planBStopId: input.planBStopId ?? null,
         createdAt: new Date().toISOString()
       };
       state.activities.set(activity.id, activity);
@@ -415,6 +531,12 @@ export function createStore() {
       if (category) items = items.filter((a) => a.category === category);
       items.sort((a, b) => b.date.localeCompare(a.date));
       return items.map(clone);
+    },
+    findActivityByPlanBStop(userId, planBStopId) {
+      const activity = [...state.activities.values()].find(
+        (item) => item.userId === String(userId) && item.planBStopId === String(planBStopId)
+      );
+      return activity ? clone(activity) : null;
     },
     countCompletedActivities(userId) {
       return [...state.activities.values()].filter((a) => a.userId === String(userId)).length;
@@ -433,14 +555,17 @@ export function createStore() {
       return state.neighbors.get(String(userId))?.size ?? 0;
     },
     getGarden(userId) {
-      const completed = this.countCompletedActivities(userId);
-      const level = Math.floor(completed / 3) + 1;
+      const activities = [...state.activities.values()].filter((a) => a.userId === String(userId));
+      const completed = activities.length;
+      const categories = ['WALK', 'EXERCISE', 'RUNNING', 'DIET', 'MENTAL_HEALTH', 'CUSTOM'];
+      const categoryGrowth = categories.map((category) => {
+        const count = activities.filter((activity) => activity.category === category).length;
+        return { category, count, stage: growthStage(count) };
+      });
       return {
-        level,
         completedActivityCount: completed,
-        completedCount: completed,
-        nextLevelAt: level * 3,
-        imageUrl: `https://placehold.co/300x300?text=garden+lv${level}`
+        pointBalance: completed * 10,
+        categoryGrowth
       };
     },
     countCreatedPlaces(userId) {
@@ -498,4 +623,12 @@ export function createStore() {
 function clone(obj) {
   if (obj == null) return obj;
   return JSON.parse(JSON.stringify(obj));
+}
+
+function growthStage(count) {
+  if (count >= 10) return 4;
+  if (count >= 6) return 3;
+  if (count >= 3) return 2;
+  if (count >= 1) return 1;
+  return 0;
 }

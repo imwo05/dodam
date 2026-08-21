@@ -2,6 +2,12 @@ node_modules/
 .DS_Store
 coverage/
 
+# Vite build output and TypeScript project metadata
+dist/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
 # 환경변수 (절대 커밋 금지 — OpenAI 키 등)
 .env
 ai-service/.env
