@@ -43,6 +43,14 @@ function currentMaps() {
   return typeof window !== 'undefined' ? window.naver?.maps : undefined;
 }
 
+function naverMapsClientId() {
+  return import.meta.env.VITE_NAVER_MAP_CLIENT_ID?.trim() ?? '';
+}
+
+export function hasNaverMapsClientId() {
+  return Boolean(naverMapsClientId());
+}
+
 export function loadNaverMaps() {
   if (currentMaps()) return Promise.resolve(currentMaps() as NaverMapsNamespace);
   if (sdkPromise) return sdkPromise;
@@ -52,7 +60,7 @@ export function loadNaverMaps() {
       reject(new Error('지도는 브라우저에서만 사용할 수 있어요.'));
       return;
     }
-    const clientId = import.meta.env.VITE_NAVER_MAP_CLIENT_ID;
+    const clientId = naverMapsClientId();
     if (!clientId) {
       reject(new Error('VITE_NAVER_MAP_CLIENT_ID가 설정되지 않았어요.'));
       return;

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Coordinates, MapBounds, MapViewProps, Place } from './map.types';
-import { loadNaverMaps, type NaverMap, type NaverMapsNamespace, type NaverOverlay } from './naver-sdk';
+import { hasNaverMapsClientId, loadNaverMaps, type NaverMap, type NaverMapsNamespace, type NaverOverlay } from './naver-sdk';
 
 const VIEWPORT_CENTER = { lat: 36.5, lng: 127.8 } satisfies Coordinates;
 
@@ -53,18 +53,25 @@ function mapCenter(props: MapViewProps) {
 
 export function MapView(props: MapViewProps) {
   const { mode, className, ariaLabel = '지도 영역' } = props;
+  const naverMapsEnabled = hasNaverMapsClientId();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<NaverMap | null>(null);
   const mapsRef = useRef<NaverMapsNamespace | null>(null);
   const overlaysRef = useRef<NaverOverlay[]>([]);
   const propsRef = useRef(props);
   const boundsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [state, setState] = useState<'disabled' | 'loading' | 'ready' | 'error'>(() => naverMapsEnabled ? 'loading' : 'disabled');
   const [sdkError, setSdkError] = useState('');
   propsRef.current = props;
 
   useEffect(() => {
+    if (!naverMapsEnabled) {
+      setState('disabled');
+      return;
+    }
     let active = true;
+    setSdkError('');
+    setState('loading');
     loadNaverMaps().then((maps) => {
       if (!active || !containerRef.current) return;
       mapsRef.current = maps;
@@ -104,7 +111,7 @@ export function MapView(props: MapViewProps) {
       overlaysRef.current = [];
       mapRef.current = null;
     };
-  }, [mode]);
+  }, [mode, naverMapsEnabled]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -141,8 +148,19 @@ export function MapView(props: MapViewProps) {
     }
   }, [props, state]);
 
-  const classes = ['map-view', className].filter(Boolean).join(' ');
+  const classes = ['map-view', state === 'disabled' ? 'map-view--disabled' : null, className].filter(Boolean).join(' ');
   const message = props.error || (state === 'error' ? sdkError : null);
+
+  if (state === 'disabled') {
+    return (
+      <section className={classes} role="region" aria-label={ariaLabel} data-map-provider="disabled" data-map-mode={mode} data-map-state="disabled">
+        <div className="map-view__disabled-copy">
+          <strong>지도 기능을 준비 중이에요.</strong>
+          <span>현재 배포 환경에서는 NAVER 지도를 사용할 수 없어요.</span>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <div
